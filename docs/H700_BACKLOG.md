@@ -14,8 +14,12 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
 - [ ] Capture FPS frame-time median/p99 and peak RSS while driving + changing cells.
 - [x] Implement opt-in soft LRU world-texture cache budget with active-resident
       pinning, conservative size estimates and asset-free GL regression.
-- [ ] Measure actual Mali texture memory / process RSS and tune the H700 default;
-      soft budget does not limit CPU mesh buffers or peak overlapping residents.
+- [x] Avoid building a third resident while the previous one is retiring
+      under the H700/low-memory profile; allow desktop scheduling unchanged.
+- [x] Add Linux process RSS/high-water logging at retirement, activation and
+      periodic intervals; run asset-free transactional guard tests in ARM64 CI.
+- [ ] Measure real H700 RSS and Mali GPU memory; adjust texture limits and
+      resident finish/retirement quotas to avoid visible load pauses.
 - [x] Scope all GPU texture-cache lookups and misses to game-data root and
       STREAM bundle; add synthetic red/green same-key cross-track regression.
 - [ ] Confirm in-process track-switch correctness with legally owned NFSU2
