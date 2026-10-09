@@ -4,7 +4,9 @@
  * Uses a minimal shader with position + color uniforms and an embedded
  * 3×5 bitmap font (same glyph set as the main game's render.c, but
  * self-contained — no dependency on render.h). */
-#ifdef __APPLE__
+#ifdef N2_GLES
+#include <SDL_opengles2.h>
+#elif defined(__APPLE__)
 #ifndef GL_SILENCE_DEPRECATION
 #define GL_SILENCE_DEPRECATION
 #endif
@@ -199,8 +201,8 @@ void fed_draw(FeDraw *d, const Fe *fe, int vp_w, int vp_h) {
     glGetIntegerv(GL_VIEWPORT, prev_vp);
     prev_blend = glIsEnabled(GL_BLEND);
     prev_depth = glIsEnabled(GL_DEPTH_TEST);
-    glGetIntegerv(GL_BLEND_SRC, &prev_blend_src);
-    glGetIntegerv(GL_BLEND_DST, &prev_blend_dst);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &prev_blend_src);
+    glGetIntegerv(GL_BLEND_DST_RGB, &prev_blend_dst);
     glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &prev_buf);
     glGetVertexAttribiv(0, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &prev_attr0);
 
