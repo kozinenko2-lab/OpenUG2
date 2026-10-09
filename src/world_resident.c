@@ -550,6 +550,14 @@ void world_resident_activate(WorldResident **active,
     world_ground_grid_activate(&next->world.grid);
 }
 
+int world_resident_can_prepare_next(int limited_memory,
+                                    const WorldResident *retired) {
+    /* The candidate is fully prepared before activation, and the old active
+     * stays alive during retirement. Do not start a second candidate until
+     * that owner has been released on a memory-constrained system. */
+    return !limited_memory || retired == NULL;
+}
+
 void world_resident_free(WorldResident *resident) {
     if (!resident) return;
     world_resident_resources_free(&resident->resources);
