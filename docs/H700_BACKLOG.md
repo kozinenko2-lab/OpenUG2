@@ -12,7 +12,13 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
 - [ ] Build with a release-compatible H700 libc/sysroot (Ubuntu CI ELF is not a console release).
 - [ ] Run on RG40XX H/MuOS, verify real Mali EGL/GLES2, fullscreen, sound, controller.
 - [ ] Capture FPS frame-time median/p99 and peak RSS while driving + changing cells.
-- [ ] Limit world texture cache memory use and evict inactive resources safely.
+- [x] Implement opt-in soft LRU world-texture cache budget with active-resident
+      pinning, conservative size estimates and asset-free GL regression.
+- [ ] Measure actual Mali texture memory / process RSS and tune the H700 default;
+      soft budget does not limit CPU mesh buffers or peak overlapping residents.
+- [ ] Ensure texture key resolution is scoped by track/archive identity across
+      in-process track switches (upstream cache assumes track switches re-exec).
+      Add synthetic two-track same-key/different-image regression.
 - [ ] Validate collision arrays and async resident replacement across region swaps.
 
 **Gate:** Device-tested playable roaming loop + logs and measured memory headroom.
