@@ -275,7 +275,7 @@ static void test_sliced_resident_textures(const char *path) {
     FILE *f=fopen(path,"wb");assert(f);
     for(int i=0;i<9;i++)write_tpk_record(f,KEY+(uint32_t)i,1);
     assert(!fclose(f));
-    GLuint first=0;
+    GLuint first=0, second=0;
     for(int attempt=0;attempt<4;attempt++) {
         if(attempt==1) {
             world_texture_cache_clear();assert(!glIsTexture(first));first=0;
@@ -315,6 +315,7 @@ static void test_sliced_resident_textures(const char *path) {
                 status=world_resident_finish_step(r,1,1,0,1,NULL);
             assert(status==1 && !w->rgn[0].data && r->resources.texture_count==9);
             assert(r->resources.textures[0]==first);
+            if (attempt==3) second=r->resources.textures[1];
             for(int i=0;i<9;i++) {
                 assert(r->resources.texture_keys[i]==KEY+(uint32_t)i);
                 assert(r->resources.mesh_textures[i]==r->resources.textures[i]);
@@ -325,6 +326,19 @@ static void test_sliced_resident_textures(const char *path) {
         }
         world_resident_free(r);assert(glIsTexture(first));
     }
+    /* The nine cache-owned textures outlive residents. Evict only the seven
+     * unused images and preserve TWO protected names, then rehash survivors.
+     * No original-game assets are required for this GL fixture. */
+    assert(first && second && first!=second);
+    assert(world_texture_cache_estimated_bytes()>0);
+    GLuint pins[2]={first,second};
+    assert(world_texture_cache_trim(pins,2,1)==7);
+    assert(glIsTexture(first) && glIsTexture(second));
+    assert(world_texture_cache_trim(&first,1,1)==1);
+    assert(glIsTexture(first) && !glIsTexture(second));
+    assert(world_texture_cache_trim(NULL,0,1)==1);
+    assert(!glIsTexture(first));
+    assert(world_texture_cache_estimated_bytes()==0);
     world_texture_cache_clear();assert(!glIsTexture(first));
 }
 
