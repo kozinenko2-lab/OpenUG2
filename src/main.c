@@ -24,6 +24,10 @@
 #include <time.h>
 #include <limits.h>
 #include <SDL.h>
+#ifdef __linux__
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 
 #include "nfsu2.h"
 #include "car_mod.h"
@@ -44,6 +48,41 @@
 #include "frontend/frontend.h"
 #include "frontend/frontend_draw.h"
 #endif
+
+/* Linux process memory diagnostic: /proc statm gives current resident set;
+ * getrusage provides the process lifetime high-water mark in KiB on Linux.
+ * Neither reports actual GPU allocation or transient compressed textures.
+ * Print only on the main/GL thread and keep this optional for desktop builds. */
+static void resident_memory_log(const char *phase, int limited_memory,
+                                const WorldResident *active,
+                                const WorldResident *candidate,
+                                const WorldResident *retired) {
+#ifdef __linux__
+    if (!limited_memory) return;
+    unsigned long virtual_pages = 0, rss_pages = 0;
+    long page_size = sysconf(_SC_PAGESIZE);
+    unsigned long long rss_kib = 0;
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (f) {
+        if (fscanf(f, "%lu %lu", &virtual_pages, &rss_pages) == 2 &&
+            page_size > 0)
+            rss_kib = (unsigned long long)rss_pages *
+                      (unsigned long long)page_size / 1024ULL;
+        fclose(f);
+    }
+    struct rusage usage = {0};
+    long peak_kib = getrusage(RUSAGE_SELF, &usage) == 0 ?
+                    usage.ru_maxrss : -1L;
+    printf("resident memory phase=%s rss=%llu KiB peak=%ld KiB "
+           "texture-cache-est=%.1f MiB owners(active=%d candidate=%d retired=%d)\n",
+           phase, rss_kib, peak_kib,
+           (double)world_texture_cache_estimated_bytes() / (1024.0*1024.0),
+           active != NULL, candidate != NULL, retired != NULL);
+#else
+    (void)phase; (void)limited_memory;
+    (void)active; (void)candidate; (void)retired;
+#endif
+}
 
 /* debug tunables — defaults match the previously hard-coded constants, so a
  * normal build behaves exactly as before; `make debug` adds an ImGui panel. */
@@ -2047,6 +2086,8 @@ int main(int argc, char **argv) {
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
+    float world_radius = 1400.0f; /* overridable via --world-radius */
+    unsigned int texture_cache_mb = 0; /* 0 keeps desktop's unbounded cache */
     for (int i = 1; i < argc; i++) {
         if      (!strcmp(argv[i], "--shot")    && i+1 < argc) shot      = argv[++i];
         else if (!strcmp(argv[i], "--resolution")) {
@@ -2060,6 +2101,35 @@ int main(int argc, char **argv) {
                 return 2;
             }
             i++;
+        }
+        else if (!strcmp(argv[i], "--world-radius")) {
+            if (i+1 >= argc) {
+                fprintf(stderr, "--world-radius requires metres (250..4000)\n");
+                return 2;
+            }
+            const char *value = argv[++i];
+            char *end = NULL;
+            float radius = strtof(value, &end);
+            if (end == value || *end || !isfinite(radius) ||
+                radius < 250.0f || radius > 4000.0f) {
+                fprintf(stderr, "invalid --world-radius '%s' (250..4000 metres)\n", value);
+                return 2;
+            }
+            world_radius = radius;
+        }
+        else if (!strcmp(argv[i], "--texture-cache-mb")) {
+            if (i+1 >= argc) {
+                fprintf(stderr, "--texture-cache-mb requires 0..1024 (0=off)\n");
+                return 2;
+            }
+            const char *value = argv[++i];
+            char *end = NULL;
+            unsigned long mb = strtoul(value, &end, 10);
+            if (end == value || *end || mb > 1024) {
+                fprintf(stderr, "invalid --texture-cache-mb '%s' (0..1024)\n", value);
+                return 2;
+            }
+            texture_cache_mb = (unsigned int)mb;
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -3115,7 +3185,17 @@ int main(int argc, char **argv) {
     unsigned retire_frames = 0, retire_peak_ms = 0, retire_total_ms = 0;
     WResidentBuildTiming candidate_timing = {0};
     unsigned finish_frames = 0, finish_peak_ms = 0, finish_total_ms = 0;
-    const WResidentPolicy resident_policy = {1400.0f, 933.0f, 67.0f, 400.0f};
+    /* Resident invariants: radius >= draw + cell + safety margin.
+       1400m uses original policy; 500m becomes {500,300,50,150}. */
+    const float resident_cell = fminf(400.0f, world_radius * 0.30f);
+    const float resident_margin = fminf(67.0f, world_radius * 0.10f);
+    const WResidentPolicy resident_policy = {
+        world_radius, world_radius - resident_cell - resident_margin,
+        resident_margin, resident_cell
+    };
+    fprintf(stdout, "resident policy: load %.0f m, draw %.0f m, cell %.0f m, margin %.0f m\n",
+            resident_policy.resident_radius, resident_policy.draw_radius,
+            resident_policy.cell_size, resident_policy.safety_margin);
     if (world2 && !world2_spawn_set) {
         const char *stem = !strncmp(trackname,"STREAM",6) ? trackname+6 : trackname;
         char companion_path[1024], stream_path[1024];
@@ -3419,6 +3499,10 @@ int main(int argc, char **argv) {
     }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 1; }
+    /* Handheld controller database is optional on ordinary desktop builds. */
+    int gamepad_maps = SDL_GameControllerAddMappingsFromFile("gamecontrollerdb-h700.txt");
+    if (gamepad_maps >= 0) fprintf(stdout, "controller mappings added: %d\n", gamepad_maps);
+
 
     /* engine sound, most to least authentic: the car's own Gnsu20 sweep
        recordings (matched by name), else an .abk sample bank (name-hash
@@ -5936,9 +6020,41 @@ int main(int argc, char **argv) {
             uint32_t elapsed = SDL_GetTicks() - begin;
             retire_frames++; retire_total_ms += elapsed;
             if (elapsed > retire_peak_ms) retire_peak_ms = elapsed;
-            if (done) printf("resident retired frames=%u total=%u ms peak-step=%u ms\n",
-                             retire_frames, retire_total_ms, retire_peak_ms);
+            if (done) {
+                printf("resident retired frames=%u total=%u ms peak-step=%u ms\n",
+                       retire_frames, retire_total_ms, retire_peak_ms);
+                resident_memory_log("retired", texture_cache_mb != 0,
+                                    active_resident, candidate_resident,
+                                    retired_resident);
+            }
         }
+        /* Prune only when no candidate GL build, background CPU job or retired
+         * resident can borrow cached texture names. Resident textures are
+         * protected; the budget is intentionally soft if active textures alone
+         * are larger. Every 120 frames avoids rehash work on the hot path. */
+        if (world2 && active_resident && texture_cache_mb &&
+            !candidate_resident && !retired_resident && !resident_job &&
+            pf_frame % 120 == 0) {
+            const WorldResidentResources *res = &active_resident->resources;
+            int pinned = res->texture_count;
+            if (res->texture_binding.count > pinned)
+                pinned = res->texture_binding.count;
+            int freed = world_texture_cache_trim(res->textures, pinned,
+                                (size_t)texture_cache_mb * 1024u * 1024u);
+            if (freed > 0) {
+                printf("texture cache: trimmed %d inactive textures, "
+                       "estimated %.1f MiB remaining (limit %u MiB)\n",
+                       freed, (double)world_texture_cache_estimated_bytes() /
+                       (1024.0 * 1024.0), texture_cache_mb);
+            } else if (freed < 0) {
+                fprintf(stderr, "texture cache: trim skipped (out of memory)\n");
+            }
+        }
+
+        if (texture_cache_mb && pf_frame % 600 == 0)
+            resident_memory_log("periodic", 1, active_resident,
+                                candidate_resident, retired_resident);
+
         /* M89 race audit: one synthetic RETURN at 1 s, delivered through SDL so
            the production race_state==3 Enter branch runs exactly as written. */
         static long ra_f = 0; static int ra_sent = 0, ra_start = -1;
@@ -5965,6 +6081,27 @@ int main(int argc, char **argv) {
         traffic_world.traffic_target=g_dbg.traffic_target;
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_CONTROLLERDEVICEREMOVED && controller &&
+                e.cdevice.which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller))) {
+                SDL_GameControllerClose(controller);
+                controller = NULL;
+                fprintf(stdout, "gamepad disconnected\n");
+                continue;
+            }
+            if (e.type == SDL_CONTROLLERDEVICEADDED && !controller &&
+                SDL_IsGameController(e.cdevice.which)) {
+                controller = SDL_GameControllerOpen(e.cdevice.which);
+                if (controller) fprintf(stdout, "gamepad connected: %s\n",
+                                         SDL_GameControllerName(controller));
+                continue;
+            }
+            if (e.type == SDL_CONTROLLERBUTTONDOWN && controller &&
+                e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK &&
+                SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START)) {
+                running = 0;
+                continue;
+            }
+
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_1 &&
                 !e.key.repeat) {
                 g_devui = !g_devui;
@@ -5990,6 +6127,31 @@ int main(int argc, char **argv) {
                 else if (e.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
                          e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
                     fe_input(&frontend, FE_INPUT_BACK);
+            }
+#endif
+#ifdef OPENUG2_MENU
+            if (!frontend_open && race_state == 3 && e.type == SDL_CONTROLLERBUTTONDOWN) {
+                /* The current event picker uses keyboard events. Forward D-pad and A/B
+                 * into that same handler instead of adding an independent race state. */
+                SDL_Keycode key = SDLK_UNKNOWN;
+                switch (e.cbutton.button) {
+                    case SDL_CONTROLLER_BUTTON_DPAD_UP:    key = SDLK_UP; break;
+                    case SDL_CONTROLLER_BUTTON_DPAD_DOWN:  key = SDLK_DOWN; break;
+                    case SDL_CONTROLLER_BUTTON_DPAD_LEFT:  key = SDLK_LEFT; break;
+                    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: key = SDLK_RIGHT; break;
+                    case SDL_CONTROLLER_BUTTON_A:
+                    case SDL_CONTROLLER_BUTTON_START:      key = SDLK_RETURN; break;
+                    case SDL_CONTROLLER_BUTTON_B:          key = SDLK_f; break;
+                    default: break;
+                }
+                if (key != SDLK_UNKNOWN) {
+                    SDL_Event mapped = {0};
+                    mapped.type = SDL_KEYDOWN;
+                    mapped.key.state = SDL_PRESSED;
+                    mapped.key.keysym.sym = key;
+                    mapped.key.keysym.scancode = SDL_GetScancodeFromKey(key);
+                    SDL_PushEvent(&mapped);
+                }
             }
 #endif
             /* HUD minimap: left-click inside the panel sets a destination.
@@ -6320,6 +6482,19 @@ int main(int argc, char **argv) {
                     world_resident_free(candidate_resident);
                     candidate_resident = NULL;
                 }
+                /* A user-initiated track switch is already a stopped-car
+                 * transaction. Drop an older retired owner before allocating
+                 * the next track's scene, preventing three simultaneous maps.
+                 * This may pause the menu briefly but never touches the active
+                 * collision grid or the current gameplay state. */
+                if (texture_cache_mb && retired_resident &&
+                    fabsf(PHYS_KMH(speed)) <= 1.0f) {
+                    printf("resident retirement: draining before track switch\n");
+                    world_resident_free(retired_resident);
+                    retired_resident = NULL;
+                    resident_memory_log("track-switch-drain", 1, active_resident,
+                                        candidate_resident, retired_resident);
+                }
                 int ok = fabsf(PHYS_KMH(speed)) <= 1.0f &&
                     prepare_map_switch(troot, next_track, runtime_scenery_event,
                                        sky_profile, &resident_policy,
@@ -6530,6 +6705,16 @@ int main(int argc, char **argv) {
                 world_resident_target(&resident_policy, carpos[0], carpos[1],
                                       active_resident->center[0],
                                       active_resident->center[1], target);
+        /* On H700, retirement must finish before allocating another map.
+         * The request remains implicit in player position; as soon as the old
+         * owner is gone it will be reconsidered on the very next frame. */
+        if (resident_wanted &&
+            !world_resident_can_prepare_next(texture_cache_mb != 0,
+                                             retired_resident)) {
+            if (pf_frame % 120 == 0)
+                printf("resident preparation deferred: previous map retiring\n");
+            resident_wanted = 0;
+        }
         int background = race_state != 0 && (!raudit || (ai_drive_audit && resident_realtime)) && !resident_sync && !resident_route_audit &&
                          (!shot || (resident_drive_audit && resident_realtime));
         if (candidate_resident && (!resident_wanted || !background ||
@@ -6681,6 +6866,9 @@ int main(int argc, char **argv) {
                            blocking_ms,
                            build_timing.validate_ms, build_timing.textures_ms,
                            build_timing.batches_ms, build_timing.collision_ms);
+                    resident_memory_log("activated", texture_cache_mb != 0,
+                                        active_resident, candidate_resident,
+                                        retired_resident);
                     printf("resident activated gen=%lu center=(%.0f,%.0f) "
                            "meshes=%d batches=%d textures=%d lights=%d "
                            "obstacles=%d build=%u ms\n",
@@ -6835,7 +7023,45 @@ int main(int argc, char **argv) {
             else if (ks[SDL_SCANCODE_S])         throttle = -1.0f;
         }
         float steer = g_dbg.freecam?0:(ks[SDL_SCANCODE_A]?1.f:0.f) - (ks[SDL_SCANCODE_D]?1.f:0.f);
-        int handbrake = (race_state==1 && !g_dbg.freecam && ks[SDL_SCANCODE_SPACE]);
+        /* Stick / D-pad steering; R2 or R1 throttle; L2 or L1 brake;
+         * B handbrake; A nitrous. Keyboard and automated audit controls remain. */
+        int gp_nitro = 0, gp_handbrake = 0;
+        if (controller && SDL_GameControllerGetAttached(controller) && !shot &&
+            !daudit && !raudit && !ai_drive_audit && !resident_drive_audit) {
+            const Sint16 ax = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
+            float gp_steer = (float)ax / 32767.0f;
+            if (gp_steer > 1.0f) gp_steer = 1.0f;
+            if (gp_steer < -1.0f) gp_steer = -1.0f;
+            if (fabsf(gp_steer) < 0.16f) gp_steer = 0.0f;
+            else gp_steer = (fabsf(gp_steer) - 0.16f) / 0.84f *
+                            (gp_steer < 0.0f ? -1.0f : 1.0f);
+            if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT))
+                gp_steer = -1.0f;
+            if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT))
+                gp_steer = 1.0f;
+            if (!g_dbg.freecam && fabsf(gp_steer) > fabsf(steer))
+                steer = -gp_steer;
+            if (race_state == 1 && !g_dbg.freecam) {
+                float gas = (float)SDL_GameControllerGetAxis(controller,
+                              SDL_CONTROLLER_AXIS_TRIGGERRIGHT) / 32767.0f;
+                float brake = (float)SDL_GameControllerGetAxis(controller,
+                                SDL_CONTROLLER_AXIS_TRIGGERLEFT) / 32767.0f;
+                if (SDL_GameControllerGetButton(controller,
+                        SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) gas = 1.0f;
+                if (SDL_GameControllerGetButton(controller,
+                        SDL_CONTROLLER_BUTTON_LEFTSHOULDER)) brake = 1.0f;
+                if (gas < 0.10f) gas = 0.0f;
+                if (brake < 0.10f) brake = 0.0f;
+                if (throttle == 0.0f && (gas > 0.0f || brake > 0.0f))
+                    throttle = gas > brake ? gas : -brake;
+                gp_handbrake = SDL_GameControllerGetButton(controller,
+                               SDL_CONTROLLER_BUTTON_B);
+                gp_nitro = SDL_GameControllerGetButton(controller,
+                               SDL_CONTROLLER_BUTTON_A);
+            }
+        }
+        int handbrake = race_state == 1 && !g_dbg.freecam &&
+                        (ks[SDL_SCANCODE_SPACE] || gp_handbrake);
         /* Auto-drive (camera-spring test): steady throttle + smooth sine steer fed
            straight into the physics, so the car throws itself through an S-curve
            hands-free. Interactive only -- gated on !shot so it never fights the
@@ -6993,7 +7219,8 @@ int main(int argc, char **argv) {
         int beam_flash = beam_keys && ks[SDL_SCANCODE_J];
         int headlights_on = (g_dbg.night_mode && (g_dbg.headlight_mode!=2 || beam_high)) || beam_flash;
         int nitro_active = race_state == 1 &&
-                           ks[SDL_SCANCODE_N] && throttle > 0.1f && speed > 0.02f;
+                           (ks[SDL_SCANCODE_N] || gp_nitro) &&
+                           throttle > 0.1f && speed > 0.02f;
         float nitro_target = nitro_active ? 1.0f : 0.0f;
         nitro_fx += (nitro_target - nitro_fx) * 0.18f;
         steer_filtered=phys_steer_response(steer_filtered,steer);
@@ -8015,6 +8242,8 @@ int main(int argc, char **argv) {
                         : zfar;
         if (view_dist > zfar) view_dist = zfar;
         if (tier == 0) view_dist = 700.0f;      /* --tier baseline: the old gate */
+        if (world2 && view_dist > resident_policy.draw_radius)
+            view_dist = resident_policy.draw_radius;
         #define VIEW_DIST view_dist
         int vistadrawn = 0, vistanear = 0;      /* batches */
         int vistamesh = 0, vistanearmesh = 0;   /* their ACTUAL mesh counts */

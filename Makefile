@@ -20,6 +20,10 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 DATA    ?= .
 
 UNAME := $(shell uname)
+# Strict -std=c99 hides POSIX/GNU declarations needed by ai.c and render.c.
+ifeq ($(UNAME),Linux)
+  CFLAGS += -D_GNU_SOURCE
+endif
 ifeq ($(UNAME),Darwin)
   GL_LIBS := -framework OpenGL
 else
@@ -272,6 +276,15 @@ ai-drive-cli-test: nfsu2
 #   CC=aarch64-linux-gnu-gcc make gles
 gles: $(SRC) $(HDRS) $(GEN)
 	$(CC) $(CFLAGS) -DN2_GLES $(SDL_CFLAGS) $(SRC) -o nfsu2 $(SDL_LIBS) -lGLESv2 -lz -lm
+# Portable SDL2 controller-driven frontend for handheld OpenGL ES 2.0.
+# Does not include the desktop-only Dear ImGui overlay.
+gles-menu: $(SRC) $(HDRS) src/frontend/frontend.c src/frontend/frontend_draw.c \
+           src/frontend/frontend.h src/frontend/frontend_draw.h $(GEN)
+	$(CC) $(CFLAGS) -DN2_GLES -DOPENUG2_MENU $(SDL_CFLAGS) $(SRC) \
+		src/frontend/frontend.c src/frontend/frontend_draw.c -o nfsu2 \
+		$(SDL_LIBS) -lGLESv2 -lz -lm
+.PHONY: gles-menu
+
 
 run: nfsu2
 	./nfsu2 $(DATA)
