@@ -75,6 +75,9 @@ typedef struct {
     WGroundGrid grid;
     WInstStats inst_stats;
     float center[2], radius;
+    /* Stable identity of (TRACKS directory, STREAM bundle), shared by every
+     * moving resident for that bundle. Texture keys can collide across maps. */
+    uint64_t texture_scope;
 } WorldNeighborhood;
 
 typedef struct {
