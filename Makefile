@@ -20,6 +20,10 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 DATA    ?= .
 
 UNAME := $(shell uname)
+# Strict -std=c99 hides POSIX/GNU declarations needed by ai.c and render.c.
+ifeq ($(UNAME),Linux)
+  CFLAGS += -D_GNU_SOURCE
+endif
 ifeq ($(UNAME),Darwin)
   GL_LIBS := -framework OpenGL
 else
