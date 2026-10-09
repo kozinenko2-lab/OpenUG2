@@ -19,7 +19,8 @@ typedef struct {
     uint32_t money;             /* prototype account, not retail NFSU2 pricing */
     uint32_t world_wins, sponsor_wins, url_wins, dvd_covers;
     uint32_t visual_rating;     /* stars, 0..10 */
-    uint32_t total_wins;        /* unique completed event identities */
+    uint32_t total_wins;        /* unique completed race identities */
+    uint32_t seen_count;        /* race + photo identities in wins[] */
     CareerWin wins[CAREER_MAX_EVENTS];
 } Career;
 typedef struct {
@@ -37,7 +38,7 @@ int career_advance_stage(Career *c);  /* one stage; requires all verified gates 
 int career_record_win(Career *c, const char *track, const char *event,
                       CareerEventKind kind, int position, int opponents,
                       uint32_t payout);
-int career_record_cover(Career *c, unsigned stars);
+int career_record_cover(Career *c, const char *location, unsigned stars);
 int career_has_win(const Career *c, const char *track, const char *event,
                    CareerEventKind kind);
 
