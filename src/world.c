@@ -489,10 +489,14 @@ typedef struct {
     unsigned char mode;
     unsigned char state;    /* 0 empty, 1 bound, 2 unresolvable */
     uint32_t build, pass;   /* emitted-in-this-build / tried-against-this-source */
+    size_t estimated_bytes;  /* approximate uncompressed texture footprint */
+    uint64_t touched;        /* LRU clock */
 } WTexCacheEntry;
 static WTexCacheEntry *g_texcache;
 static int g_texcache_cap, g_texcache_used;
 static uint32_t g_texbind_build, g_texbind_pass;
+static size_t g_texcache_bytes;
+static uint64_t g_texcache_clock;
 
 /* Slot for `key`: an occupied entry, or the empty slot it belongs in.
  * NULL only if the table cannot grow -- fail the candidate, never create an
@@ -524,7 +528,78 @@ void world_texture_cache_clear(void) {
     free(g_texcache);
     g_texcache = NULL; g_texcache_cap = g_texcache_used = 0;
     g_texbind_build = g_texbind_pass = 0;
+    g_texcache_bytes = 0;
+    g_texcache_clock = 0;
 }
+size_t world_texture_cache_estimated_bytes(void) {
+    return g_texcache_bytes;
+}
+
+/* Call ONLY on the GL thread between complete resident builds, after old
+ * resident retirement. Protected IDs are still in the active scene.
+ * Soft limit: resident-owned textures are never evicted.
+ * Rebuild the open-addressed table after deletions to preserve lookups. */
+int world_texture_cache_trim(const GLuint *protected_ids, int protected_count,
+                             size_t budget_bytes) {
+    if (!g_texcache || g_texcache_bytes <= budget_bytes) return 0;
+    if (protected_count < 0 || (protected_count > 0 && !protected_ids)) return -1;
+    WTexCacheEntry *next = (WTexCacheEntry *)calloc(
+        (size_t)g_texcache_cap, sizeof *next);
+    unsigned char *keep = (unsigned char *)calloc(
+        (size_t)g_texcache_cap, 1);
+    if (!next || !keep) {
+        free(next); free(keep);
+        return -1;
+    }
+    for (int i = 0; i < g_texcache_cap; i++) {
+        WTexCacheEntry *e = &g_texcache[i];
+        if (e->state != 1 || !e->tex) continue;
+        for (int j = 0; j < protected_count; j++) {
+            if (protected_ids[j] == e->tex) {
+                keep[i] = 1;
+                break;
+            }
+        }
+    }
+    int evicted = 0;
+    while (g_texcache_bytes > budget_bytes) {
+        int oldest = -1;
+        uint64_t least_recent = UINT64_MAX;
+        for (int i = 0; i < g_texcache_cap; i++) {
+            WTexCacheEntry *e = &g_texcache[i];
+            if (e->state != 1 || keep[i] || !e->tex) continue;
+            if (e->touched < least_recent) {
+                oldest = i;
+                least_recent = e->touched;
+            }
+        }
+        if (oldest < 0) break;
+        WTexCacheEntry *e = &g_texcache[oldest];
+        glDeleteTextures(1, &e->tex);
+        if (e->estimated_bytes <= g_texcache_bytes)
+            g_texcache_bytes -= e->estimated_bytes;
+        else g_texcache_bytes = 0;
+        memset(e, 0, sizeof *e);
+        evicted++;
+    }
+    if (evicted) {
+        int used = 0;
+        for (int i = 0; i < g_texcache_cap; i++) {
+            WTexCacheEntry e = g_texcache[i];
+            if (!e.state) continue;
+            uint32_t h = e.key & (uint32_t)(g_texcache_cap - 1);
+            while (next[h].state) h = (h+1) & (uint32_t)(g_texcache_cap-1);
+            next[h] = e;
+            used++;
+        }
+        free(g_texcache);
+        g_texcache = next;
+        g_texcache_used = used;
+    } else free(next);
+    free(keep);
+    return evicted;
+}
+
 
 /* Bind one requested key from one source, honouring the cache. `last` marks
  * the final source this key will ever be offered, so a failure there -- and
@@ -545,6 +620,7 @@ static int world_bind_key(World *w, const WRegion *g, uint32_t tk, int pass,
         if (modes) modes[*n] = e->mode;
         (*n)++;
         e->build = binding->build;
+        e->touched = ++g_texcache_clock;
         return 0;
     }
     if (e && e->state == 2) return 0;           /* known unresolvable */
@@ -569,6 +645,13 @@ static int world_bind_key(World *w, const WRegion *g, uint32_t tk, int pass,
         if (e) {
             if (!e->state) g_texcache_used++;
             e->state = 1; e->tex = id; e->mode = mode; e->build = binding->build;
+            /* Conservative uncompressed equivalent, including mipmaps.
+             * Actual Mali allocation can differ due to compression/alignment. */
+            size_t pixels = (size_t)tt.w * (size_t)tt.h;
+            e->estimated_bytes = (pixels * (tt.alpha ? 4u : 3u) * 4u) / 3u;
+            if (!e->estimated_bytes) e->estimated_bytes = 1;
+            g_texcache_bytes += e->estimated_bytes;
+            e->touched = ++g_texcache_clock;
         }
     } else {
         if (owner && g_world_texaudit && (ok || pass || !w->neighborhood.common)) {
