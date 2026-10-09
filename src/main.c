@@ -24,6 +24,10 @@
 #include <time.h>
 #include <limits.h>
 #include <SDL.h>
+#ifdef __linux__
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 
 #include "nfsu2.h"
 #include "car_mod.h"
@@ -44,6 +48,41 @@
 #include "frontend/frontend.h"
 #include "frontend/frontend_draw.h"
 #endif
+
+/* Linux process memory diagnostic: /proc statm gives current resident set;
+ * getrusage provides the process lifetime high-water mark in KiB on Linux.
+ * Neither reports actual GPU allocation or transient compressed textures.
+ * Print only on the main/GL thread and keep this optional for desktop builds. */
+static void resident_memory_log(const char *phase, int limited_memory,
+                                const WorldResident *active,
+                                const WorldResident *candidate,
+                                const WorldResident *retired) {
+#ifdef __linux__
+    if (!limited_memory) return;
+    unsigned long virtual_pages = 0, rss_pages = 0;
+    long page_size = sysconf(_SC_PAGESIZE);
+    unsigned long long rss_kib = 0;
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (f) {
+        if (fscanf(f, "%lu %lu", &virtual_pages, &rss_pages) == 2 &&
+            page_size > 0)
+            rss_kib = (unsigned long long)rss_pages *
+                      (unsigned long long)page_size / 1024ULL;
+        fclose(f);
+    }
+    struct rusage usage = {0};
+    long peak_kib = getrusage(RUSAGE_SELF, &usage) == 0 ?
+                    usage.ru_maxrss : -1L;
+    printf("resident memory phase=%s rss=%llu KiB peak=%ld KiB "
+           "texture-cache-est=%.1f MiB owners(active=%d candidate=%d retired=%d)\n",
+           phase, rss_kib, peak_kib,
+           (double)world_texture_cache_estimated_bytes() / (1024.0*1024.0),
+           active != NULL, candidate != NULL, retired != NULL);
+#else
+    (void)phase; (void)limited_memory;
+    (void)active; (void)candidate; (void)retired;
+#endif
+}
 
 /* debug tunables — defaults match the previously hard-coded constants, so a
  * normal build behaves exactly as before; `make debug` adds an ImGui panel. */
@@ -5981,8 +6020,13 @@ int main(int argc, char **argv) {
             uint32_t elapsed = SDL_GetTicks() - begin;
             retire_frames++; retire_total_ms += elapsed;
             if (elapsed > retire_peak_ms) retire_peak_ms = elapsed;
-            if (done) printf("resident retired frames=%u total=%u ms peak-step=%u ms\n",
-                             retire_frames, retire_total_ms, retire_peak_ms);
+            if (done) {
+                printf("resident retired frames=%u total=%u ms peak-step=%u ms\n",
+                       retire_frames, retire_total_ms, retire_peak_ms);
+                resident_memory_log("retired", texture_cache_mb != 0,
+                                    active_resident, candidate_resident,
+                                    retired_resident);
+            }
         }
         /* Prune only when no candidate GL build, background CPU job or retired
          * resident can borrow cached texture names. Resident textures are
@@ -6006,6 +6050,10 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "texture cache: trim skipped (out of memory)\n");
             }
         }
+
+        if (texture_cache_mb && pf_frame % 600 == 0)
+            resident_memory_log("periodic", 1, active_resident,
+                                candidate_resident, retired_resident);
 
         /* M89 race audit: one synthetic RETURN at 1 s, delivered through SDL so
            the production race_state==3 Enter branch runs exactly as written. */
@@ -6434,6 +6482,19 @@ int main(int argc, char **argv) {
                     world_resident_free(candidate_resident);
                     candidate_resident = NULL;
                 }
+                /* A user-initiated track switch is already a stopped-car
+                 * transaction. Drop an older retired owner before allocating
+                 * the next track's scene, preventing three simultaneous maps.
+                 * This may pause the menu briefly but never touches the active
+                 * collision grid or the current gameplay state. */
+                if (texture_cache_mb && retired_resident &&
+                    fabsf(PHYS_KMH(speed)) <= 1.0f) {
+                    printf("resident retirement: draining before track switch\n");
+                    world_resident_free(retired_resident);
+                    retired_resident = NULL;
+                    resident_memory_log("track-switch-drain", 1, active_resident,
+                                        candidate_resident, retired_resident);
+                }
                 int ok = fabsf(PHYS_KMH(speed)) <= 1.0f &&
                     prepare_map_switch(troot, next_track, runtime_scenery_event,
                                        sky_profile, &resident_policy,
@@ -6644,6 +6705,16 @@ int main(int argc, char **argv) {
                 world_resident_target(&resident_policy, carpos[0], carpos[1],
                                       active_resident->center[0],
                                       active_resident->center[1], target);
+        /* On H700, retirement must finish before allocating another map.
+         * The request remains implicit in player position; as soon as the old
+         * owner is gone it will be reconsidered on the very next frame. */
+        if (resident_wanted &&
+            !world_resident_can_prepare_next(texture_cache_mb != 0,
+                                             retired_resident)) {
+            if (pf_frame % 120 == 0)
+                printf("resident preparation deferred: previous map retiring\n");
+            resident_wanted = 0;
+        }
         int background = race_state != 0 && (!raudit || (ai_drive_audit && resident_realtime)) && !resident_sync && !resident_route_audit &&
                          (!shot || (resident_drive_audit && resident_realtime));
         if (candidate_resident && (!resident_wanted || !background ||
@@ -6795,6 +6866,9 @@ int main(int argc, char **argv) {
                            blocking_ms,
                            build_timing.validate_ms, build_timing.textures_ms,
                            build_timing.batches_ms, build_timing.collision_ms);
+                    resident_memory_log("activated", texture_cache_mb != 0,
+                                        active_resident, candidate_resident,
+                                        retired_resident);
                     printf("resident activated gen=%lu center=(%.0f,%.0f) "
                            "meshes=%d batches=%d textures=%d lights=%d "
                            "obstacles=%d build=%u ms\n",
