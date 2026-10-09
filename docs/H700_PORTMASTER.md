@@ -18,6 +18,13 @@ Knulli differ in their SDL video stack and runtime libraries.
   B handbrake and A nitrous, with device plug/unplug handling.
 - GLES2-compatible temporary front-end menu (`make gles-menu`).
 - `portmaster/OpenUG2.sh` with editable RESOLUTION=640x480 and WORLD_RADIUS=500.
+- `--texture-cache-mb N` soft world texture budget (0 disables trimming);
+  launcher defaults to 96 MiB. Active resident textures are always protected,
+  and trimming waits until background/candidate/retired residents are absent.
+  Accounting estimates uncompressed RGB/RGBA+mip size, **not actual Mali VRAM**.
+  Driver memory, GPU buffers and temporary CPU decoded textures are excluded.
+- Asset-free GL regression confirms inactive GL names are deleted but pinned
+  active resident names remain valid.
 - Handheld controller mapping and diagnostic log in `openug2/logs/OpenUG2.log`.
 - CI on **native Ubuntu ARM64** tests GLES2 compilation and synthetic test
   targets, but its binary may depend on a newer glibc than custom handheld OSes.
@@ -81,6 +88,7 @@ have been tested with legally acquired game files.
 ```bash
 RESOLUTION="640x480"
 WORLD_RADIUS="500"
+TEXTURE_CACHE_MB="96"
 ```
 
 После изменений **пересборка не нужна**. Радиус 500 м — это область загрузки
