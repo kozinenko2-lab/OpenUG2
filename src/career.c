@@ -164,9 +164,9 @@ static int load_one(Career *out, const char *path) {
     if (!f) return 0;
     unsigned char data[CAREER_MAX_FILE+1];
     size_t n=fread(data,1,sizeof data,f);
-    int good = !ferror(f) && feof(f) && fclose(f)==0 &&
-               decode(out,data,n);
-    return good;
+    int io_good = !ferror(f) && feof(f);
+    if (fclose(f) != 0) io_good = 0;
+    return io_good && decode(out,data,n);
 }
 static char *suffix(const char *path, const char *ext) {
     if (!path || !*path) return NULL;
