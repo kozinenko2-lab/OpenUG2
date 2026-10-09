@@ -121,6 +121,12 @@ void world_resident_job_cancel(WResidentJob **job);
 void world_resident_activate(WorldResident **active,
                              WorldResident **candidate);
 void world_resident_free(WorldResident *resident);
+/* On memory-limited targets do not launch another resident build while the
+ * previously active world is still retiring. This bounds the residency
+ * pipeline to active + candidate rather than active + candidate + retired.
+ * The ordinary desktop path (limited_memory=0) keeps existing scheduling. */
+int world_resident_can_prepare_next(int limited_memory,
+                                    const WorldResident *retired);
 /* GL-thread cleanup of an INACTIVE resident, at most max_items batches/meshes
  * per call. Returns 1 and clears the slot when done; 0 leaves a partial owner.
  * The partial owner must not be queried/rendered. world_resident_free remains
