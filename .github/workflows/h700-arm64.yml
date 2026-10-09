@@ -1,0 +1,63 @@
+name: H700 foundation / ARM64 GLES2 checks
+
+on:
+  push:
+    branches:
+      - main
+      - 'portmaster/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arm64-gles2:
+    # Native ARM64 test machine, NOT an H700 sysroot.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux ARM64 dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsdl2-dev libgles2-mesa-dev \
+            libgl-dev zlib1g-dev xxd file
+      - name: Validate launcher syntax and executable permissions
+        run: |
+          bash -n portmaster/OpenUG2.sh
+          test -f portmaster/openug2/gamecontrollerdb-h700.txt
+      - name: Compile ARM64 OpenGL ES2 renderer
+        run: |
+          make gles
+          file nfsu2
+          readelf -h nfsu2 | grep -q AArch64
+      - name: Validate input parsing without retail assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for bad in abc 0 249 4001 nan inf; do
+            set +e
+            ./nfsu2 /tmp/no-nfsu2-data --world-radius "$bad" > /tmp/invalid-radius.log 2>&1
+            code=$?
+            set -e
+            test "$code" -eq 2 || { cat /tmp/invalid-radius.log; exit 1; }
+          done
+      - name: Compile ARM64 gamepad-driven GLES2 menu
+        run: |
+          make gles-menu
+          readelf -h nfsu2 | grep -q AArch64
+      - name: Data-independent physics and world tests
+        run: |
+          make world-group-test
+          make district-collision-test
+          make world-instance-test
+          make car-material-test
+      - name: Save ARM64 smoke-test binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: openug2-linux-arm64-gles2-ci-only
+          path: nfsu2
+          retention-days: 7
