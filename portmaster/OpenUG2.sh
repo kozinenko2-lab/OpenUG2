@@ -2,6 +2,7 @@
 # OpenUG2 - H700 PortMaster launcher. Edit values below without recompiling.
 RESOLUTION="640x480"
 WORLD_RADIUS="500"
+TEXTURE_CACHE_MB="96"
 TRACK="STREAML4RA"
 CAR="HUMMER"
 TRAFFIC="0"
@@ -56,6 +57,9 @@ if (( 10#$WORLD_RADIUS < 250 || 10#$WORLD_RADIUS > 4000 )); then
 fi
 
 DATA="$GAMEDIR/game"
+if [[ ! "$TEXTURE_CACHE_MB" =~ ^[0-9]+$ ]] || (( 10#$TEXTURE_CACHE_MB > 1024 )); then
+    echo "TEXTURE_CACHE_MB must be 0..1024"; exit 2
+fi
 if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
     echo "Missing retail NFS Underground 2 data: TRACKS/CARS under $DATA"
     exit 3
@@ -69,6 +73,7 @@ fi
 "$GAMEDIR/nfsu2" "$DATA" \
     --resolution "$RESOLUTION" \
     --world-radius "$WORLD_RADIUS" \
+    --texture-cache-mb "$TEXTURE_CACHE_MB" \
     --track "$TRACK" \
     --car "$CAR" \
     --traffic "$TRAFFIC" \
