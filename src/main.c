@@ -40,6 +40,7 @@
 #include "world_resident.h"
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
+#include "career.h"       /* persistent prototype career state */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2083,6 +2084,7 @@ int main(int argc, char **argv) {
     const char *carname = "HUMMER", *trackname = "STREAML4RA";
     const char *circuit = "ROUTESL4RF/Paths4602.bin"; int explicit_circuit = 0;
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
+    const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2130,6 +2132,14 @@ int main(int argc, char **argv) {
                 return 2;
             }
             texture_cache_mb = (unsigned int)mb;
+        }
+        else if (!strcmp(argv[i], "--career-save")) {
+            if (i+1 >= argc || !argv[i+1][0] ||
+                (argv[i+1][0]=='-' && argv[i+1][1]=='-')) {
+                fprintf(stderr,"--career-save requires a profile file path\n");
+                return 2;
+            }
+            career_save_path = argv[++i];
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -5885,6 +5895,17 @@ int main(int argc, char **argv) {
     int race_state = 1;
 #endif
     int racetimer = 0, finish_place = 0;
+    Career career;
+    career_init(&career);
+    if (career_save_path) {
+        int loaded = career_load(&career, career_save_path);
+        printf("career profile: %s stage=%u cash=%u unique-wins=%u "
+               "stage-wins=%u sponsor=%u URL=%u photo=%u\n",
+               loaded ? "loaded" : "new",
+               career.stage, career.money, career.total_wins,
+               career.world_wins, career.sponsor_wins,
+               career.url_wins, career.dvd_covers);
+    }
 #ifdef OPENUG2_MENU
     Fe frontend;
     FeDraw *frontend_draw = NULL;
@@ -8005,6 +8026,28 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
+            /* Only a confirmed FIRST PLACE over actual circuit opponents may
+             * affect the career. Event-free roam and solo scripted-event
+             * gate completion are NOT valid career wins. Event IDs and retail
+             * payout tables are not verified yet. The prototype 500-unit award
+             * is deliberately limited to the existing completed AI circuit. */
+            if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
+                selcirc>=0 && selcirc<ncirc && aipath.n>1) {
+                Career updated = career;
+                if (career_record_win(&updated, trackname, circlist[selcirc],
+                                      CAREER_WORLD, finish_place, nai, 500)) {
+                    int promoted = career_advance_stage(&updated);
+                    if (career_save(&updated,career_save_path)) {
+                        career = updated;
+                        printf("career verified circuit victory: %s stage=%u "
+                               "new-world-wins=%u cash=%u%s\n",
+                               circlist[selcirc], career.stage,
+                               career.world_wins, career.money,
+                               promoted ? " [STAGE UNLOCKED]" : "");
+                    } else fprintf(stderr,"career save failed: %s\n",
+                                   career_save_path);
+                } else printf("career replay: already counted, no duplicate cash\n");
+            }
         }
 
         /* M132-R capture freeze: latch the position production placed at the
@@ -9684,6 +9727,16 @@ int main(int argc, char **argv) {
             draw_text(&quad, uMVP, carname, -text_width(carname,0.017f)/2, 0.56f, 0.017f, 0.026f);
             glUniform3f(uColor, 0.45f, 0.7f, 1.0f);
             draw_text(&quad, uMVP, trackname, -text_width(trackname,0.012f)/2, 0.23f, 0.012f, 0.02f);
+            if (career_save_path) {
+                CareerRequirements req = career_requirements(career.stage);
+                char progress[128];
+                snprintf(progress,sizeof progress,
+                         "CAREER %u/5   WORLD %u/%u   CASH %u",
+                         career.stage,career.world_wins,req.world_wins,career.money);
+                glUniform3f(uColor,0.65f,0.85f,0.50f);
+                draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
+                          0.12f,0.012f,0.02f);
+            }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
             float M[16]={0.5f,0,0,0, 0,0.06f,0,0, 0,0,1,0, -0.25f,-0.25f,0,1};
@@ -9817,7 +9870,8 @@ int main(int argc, char **argv) {
             }
             hs.have_nitro_tank = 0;   /* no capacity/depletion system exists */
             hs.have_boost = 0;        /* no turbo pressure anywhere in src/ */
-            hs.have_money = 0;        /* no career economy exists */
+            hs.have_money = career_save_path != NULL;
+            hs.money = (long)career.money;
 
             /* Two independent things can mean "in a race": the authored event
                tracker (gates + laps, which needs no AI opponents at all) and
