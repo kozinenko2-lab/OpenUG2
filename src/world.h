@@ -248,6 +248,16 @@ int world_bind_textures_step(World *w, uint32_t *keys, GLuint *texs,
  * process (a track switch re-execs, so only tests need that). */
 void world_texture_cache_clear(void);
 
+/* Conservative RGB/RGBA+mipmap estimate, NOT measured driver/VRAM bytes.
+ * GL-thread-only; no calls while a WorldResident GPU binding is in progress.
+ * protected_ids is the active resident's borrowed GL texture list. Trimming
+ * respects all such names and may remain above budget if the current resident
+ * exceeds it. Returns number of evicted textures or -1 on allocation error.
+ * Pass 0 as a budget to fully evict unprotected textures. */
+size_t world_texture_cache_estimated_bytes(void);
+int world_texture_cache_trim(const GLuint *protected_ids, int protected_count,
+                             size_t budget_bytes);
+
 /* Ground height at (x,y): same contract as n2_ground_z but only tests the
  * road/terrain meshes whose bbox covers the point (grid lookup). */
 /* Which kind of surface the ground query landed on. */
