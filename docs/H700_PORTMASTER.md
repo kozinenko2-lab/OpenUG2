@@ -25,6 +25,13 @@ Knulli differ in their SDL video stack and runtime libraries.
   Driver memory, GPU buffers and temporary CPU decoded textures are excluded.
 - Asset-free GL regression confirms inactive GL names are deleted but pinned
   active resident names remain valid.
+- The world-texture cache now keys entries by **(game-data root, STREAM
+  bundle, texture key)** instead of the texture key alone. Changing tracks
+  in-process cannot borrow pixels from an older track with a colliding key.
+  Negative (missing) lookup entries are namespaced too.
+- Synthetic two-track/same-key tests exercise different red/green images,
+  same-track reuse, old/new world coexistence and safe post-switch eviction.
+  Source files must stay unchanged during one running game session.
 - Handheld controller mapping and diagnostic log in `openug2/logs/OpenUG2.log`.
 - CI on **native Ubuntu ARM64** tests GLES2 compilation and synthetic test
   targets, but its binary may depend on a newer glibc than custom handheld OSes.
