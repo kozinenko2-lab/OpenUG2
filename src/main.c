@@ -2048,6 +2048,7 @@ int main(int argc, char **argv) {
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
     float world_radius = 1400.0f; /* overridable via --world-radius */
+    unsigned int texture_cache_mb = 0; /* 0 keeps desktop's unbounded cache */
     for (int i = 1; i < argc; i++) {
         if      (!strcmp(argv[i], "--shot")    && i+1 < argc) shot      = argv[++i];
         else if (!strcmp(argv[i], "--resolution")) {
@@ -2076,6 +2077,20 @@ int main(int argc, char **argv) {
                 return 2;
             }
             world_radius = radius;
+        }
+        else if (!strcmp(argv[i], "--texture-cache-mb")) {
+            if (i+1 >= argc) {
+                fprintf(stderr, "--texture-cache-mb requires 0..1024 (0=off)\n");
+                return 2;
+            }
+            const char *value = argv[++i];
+            char *end = NULL;
+            unsigned long mb = strtoul(value, &end, 10);
+            if (end == value || *end || mb > 1024) {
+                fprintf(stderr, "invalid --texture-cache-mb '%s' (0..1024)\n", value);
+                return 2;
+            }
+            texture_cache_mb = (unsigned int)mb;
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -5969,6 +5984,29 @@ int main(int argc, char **argv) {
             if (done) printf("resident retired frames=%u total=%u ms peak-step=%u ms\n",
                              retire_frames, retire_total_ms, retire_peak_ms);
         }
+        /* Prune only when no candidate GL build, background CPU job or retired
+         * resident can borrow cached texture names. Resident textures are
+         * protected; the budget is intentionally soft if active textures alone
+         * are larger. Every 120 frames avoids rehash work on the hot path. */
+        if (world2 && active_resident && texture_cache_mb &&
+            !candidate_resident && !retired_resident && !resident_job &&
+            pf_frame % 120 == 0) {
+            const WorldResidentResources *res = &active_resident->resources;
+            int pinned = res->texture_count;
+            if (res->texture_binding.count > pinned)
+                pinned = res->texture_binding.count;
+            int freed = world_texture_cache_trim(res->textures, pinned,
+                                (size_t)texture_cache_mb * 1024u * 1024u);
+            if (freed > 0) {
+                printf("texture cache: trimmed %d inactive textures, "
+                       "estimated %.1f MiB remaining (limit %u MiB)\n",
+                       freed, (double)world_texture_cache_estimated_bytes() /
+                       (1024.0 * 1024.0), texture_cache_mb);
+            } else if (freed < 0) {
+                fprintf(stderr, "texture cache: trim skipped (out of memory)\n");
+            }
+        }
+
         /* M89 race audit: one synthetic RETURN at 1 s, delivered through SDL so
            the production race_state==3 Enter branch runs exactly as written. */
         static long ra_f = 0; static int ra_sent = 0, ra_start = -1;
