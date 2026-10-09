@@ -93,6 +93,91 @@ static void run_case(const char *tracks,const char *masterpath,
     free(w);
 }
 
+/* Reproduce track switching without the retail game. All three synthetic
+ * bundles reuse KEY; the correct image is selected by source identity, not
+ * by its 32-bit texture identifier. The first texture must stay alive while
+ * the new world is constructed. */
+static GLuint scoped_fixture_bind(const char *tracks, const char *track,
+                                  uint32_t wanted, uint64_t *scope) {
+    World *w = (World *)calloc(1, sizeof *w);
+    assert(w);
+    /* Synthetic TPK-only fixtures contain no renderable meshes. */
+    assert(world_load(w, tracks, track) == 0);
+    assert(w->neighborhood.nreg == 1 && w->neighborhood.rgn[0].data);
+    if (scope) *scope = w->neighborhood.texture_scope;
+    assert(w->neighborhood.texture_scope);
+    w->neighborhood.scene.meshes = calloc(1, sizeof *w->neighborhood.scene.meshes);
+    assert(w->neighborhood.scene.meshes);
+    w->neighborhood.scene.count = w->neighborhood.scene.cap = 1;
+    w->neighborhood.rgn[0].mesh0 = 0;
+    w->neighborhood.rgn[0].mesh1 = 1;
+    w->neighborhood.scene.meshes[0].texkey = wanted;
+    uint32_t key = 0; GLuint texture = 0; unsigned char mode = 0;
+    int bound = world_bind_textures(w, &key, &texture, &mode, 1);
+    assert(bound == 0 || bound == 1);
+    if (bound) assert(key == wanted && texture && mode == N2_DRAW_BLEND);
+    world_neighborhood_free(&w->neighborhood);
+    world_city_free(&w->city);
+    free(w);
+    return bound ? texture : 0;
+}
+static void assert_scoped_rgb(GLuint texture, unsigned char red,
+                              unsigned char green) {
+    unsigned char pixels[4*4*4];
+    assert(glIsTexture(texture));
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    assert(glGetError() == GL_NO_ERROR);
+    assert(pixels[0] == red && pixels[1] == green && pixels[2] == 0);
+}
+static void test_cross_track_cache(const char *root, const char *tracks) {
+    char a[192], b[192], alternate[192], other[192];
+    snprintf(a, sizeof a, "%s/STREAMTEST.BUN", tracks);
+    snprintf(b, sizeof b, "%s/STREAMALT.BUN", tracks);
+    snprintf(other, sizeof other, "%s/OTHER_TRACKS", root);
+    snprintf(alternate, sizeof alternate, "%s/STREAMTEST.BUN", other);
+    assert(mkdir(other, 0700) == 0);
+    write_tpk(a, KEY, 0); /* red */
+    FILE *f = fopen(b, "wb"); assert(f);
+    write_tpk_record(f, KEY, 1);      /* green under the same key */
+    write_tpk_record(f, KEY+77u, 1);  /* only the second track has this key */
+    assert(!fclose(f));
+    write_tpk(alternate, KEY, 1);
+
+    uint64_t scope_a=0, scope_b=0, scope_c=0;
+    GLuint original = scoped_fixture_bind(tracks, "STREAMTEST", KEY, &scope_a);
+    /* Negative cache entries must also be per track. */
+    assert(!scoped_fixture_bind(tracks, "STREAMTEST", KEY+77u, NULL));
+    GLuint switched = scoped_fixture_bind(tracks, "STREAMALT", KEY, &scope_b);
+    GLuint was_missing = scoped_fixture_bind(tracks, "STREAMALT", KEY+77u, NULL);
+    GLuint different_root = scoped_fixture_bind(other, "STREAMTEST", KEY, &scope_c);
+
+    assert(scope_a != scope_b && scope_a != scope_c && scope_b != scope_c);
+    assert(original && switched && was_missing && different_root);
+    assert(original != switched && original != different_root);
+    assert(switched != different_root && switched != was_missing);
+    assert_scoped_rgb(original, 255, 0);
+    assert_scoped_rgb(switched, 0, 255);
+    assert_scoped_rgb(different_root, 0, 255);
+    /* Moving residents in one bundle still share one cached GL image. */
+    assert(scoped_fixture_bind(tracks, "STREAMTEST", KEY, NULL) == original);
+    assert(scoped_fixture_bind(tracks, "STREAMALT", KEY, NULL) == switched);
+
+    GLuint active[] = {original, switched, different_root, was_missing};
+    assert(world_texture_cache_trim(active, 4, 1) == 0);
+    assert(glIsTexture(original) && glIsTexture(switched));
+    /* Retire old-world names after the switch, never the active-world name. */
+    assert(world_texture_cache_trim(&switched, 1, 1) == 3);
+    assert(!glIsTexture(original) && glIsTexture(switched));
+    assert(!glIsTexture(was_missing) && !glIsTexture(different_root));
+    assert(scoped_fixture_bind(tracks, "STREAMALT", KEY, NULL) == switched);
+    world_texture_cache_clear();
+    assert(!glIsTexture(switched));
+
+    assert(!unlink(a) && !unlink(b) && !unlink(alternate));
+    assert(!rmdir(other));
+}
+
 static void test_resident_resource_cleanup(void) {
     WorldResidentResources resources = {0};
     resources.texture_count = 2;
@@ -587,6 +672,7 @@ int main(void) {
     test_sliced_u16_limit();
     test_incremental_retirement();
     test_sliced_resident_textures(master);
+    test_cross_track_cache(root, tracks);
     /* No regional match: common supplies exact key, RGBA and draw mode once. */
     write_tpk(region,KEY+1,1);write_tpk(common,KEY,0);
     run_case(tracks,NULL,1,0,0,0);
