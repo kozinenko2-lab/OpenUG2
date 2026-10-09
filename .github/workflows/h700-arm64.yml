@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libsdl2-dev libgles2-mesa-dev \
-            libgl-dev zlib1g-dev xxd file
+            libgl-dev zlib1g-dev xxd file xvfb xauth
       - name: Validate launcher syntax and executable permissions
         run: |
           bash -n portmaster/OpenUG2.sh
@@ -45,6 +45,13 @@ jobs:
             set -e
             test "$code" -eq 2 || { cat /tmp/invalid-radius.log; exit 1; }
           done
+          for bad in abc -1 1025 999999999999; do
+            set +e
+            ./nfsu2 /tmp/no-nfsu2-data --texture-cache-mb "$bad" > /tmp/invalid-cache.log 2>&1
+            code=$?
+            set -e
+            test "$code" -eq 2 || { cat /tmp/invalid-cache.log; exit 1; }
+          done
       - name: Compile ARM64 gamepad-driven GLES2 menu
         run: |
           make gles-menu
@@ -55,6 +62,11 @@ jobs:
           make district-collision-test
           make world-instance-test
           make car-material-test
+      - name: GL-backed texture cache regression without game assets
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          xvfb-run -a make world-texture-test
       - name: Save ARM64 smoke-test binary
         uses: actions/upload-artifact@v4
         with:
