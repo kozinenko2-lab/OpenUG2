@@ -11,27 +11,27 @@ Knulli differ in their SDL video stack and runtime libraries.
 
 ## What this branch changes
 
-- \`--world-radius METRES\` runtime argument, valid 250-4000; upstream desktop
+- `--world-radius METRES` runtime argument, valid 250-4000; upstream desktop
   default 1400 metres remains unchanged. At 500m, the resident policy is load
   500m, draw 300m, cell 150m, safety margin 50m.
 - SDL_GameController left stick, D-pad, trigger/shoulder accelerator and brake,
   B handbrake and A nitrous, with device plug/unplug handling.
-- GLES2-compatible temporary front-end menu (\`make gles-menu\`).
-- \`portmaster/OpenUG2.sh\` with editable RESOLUTION=640x480 and WORLD_RADIUS=500.
-- Handheld controller mapping and diagnostic log in \`openug2/logs/OpenUG2.log\`.
+- GLES2-compatible temporary front-end menu (`make gles-menu`).
+- `portmaster/OpenUG2.sh` with editable RESOLUTION=640x480 and WORLD_RADIUS=500.
+- Handheld controller mapping and diagnostic log in `openug2/logs/OpenUG2.log`.
 - CI on **native Ubuntu ARM64** tests GLES2 compilation and synthetic test
   targets, but its binary may depend on a newer glibc than custom handheld OSes.
 
 ## Reproducible build without commercial data
 
-On Debian/Ubuntu ARM64 with packages \`libsdl2-dev\`, \`libgles2-mesa-dev\`,
-\`zlib1g-dev\`, \`xxd\` and build tools:
+On Debian/Ubuntu ARM64 with packages `libsdl2-dev`, `libgles2-mesa-dev`,
+`zlib1g-dev`, `xxd` and build tools:
 
-\`\`\`sh
+```sh
 make gles-menu
 bash -n portmaster/OpenUG2.sh
 make world-group-test district-collision-test world-instance-test
-\`\`\`
+```
 
 This validates ARM64 + GLES2 API compatibility; it is *not* a guaranteed
 PortMaster console binary. For H700 deployment cross-link against the exact
@@ -40,7 +40,7 @@ on device. Do not include dummy/link-only GLES stubs in the runtime package.
 
 ## Layout on muOS (adjust for other systems)
 
-\`\`\`text
+```text
 /mnt/sdcard/ROMS/ports/OpenUG2.sh
 /mnt/sdcard/ports/openug2/nfsu2
 /mnt/sdcard/ports/openug2/gamecontrollerdb-h700.txt
@@ -48,7 +48,7 @@ on device. Do not include dummy/link-only GLES stubs in the runtime package.
 /mnt/sdcard/ports/openug2/game/TRACKS/        # owned retail game
 /mnt/sdcard/ports/openug2/game/GLOBAL/        # owned retail game
 /mnt/sdcard/ports/openug2/logs/OpenUG2.log
-\`\`\`
+```
 
 No EA game assets or executable are stored in this repository. Verify
 the SDL controller GUID and control mapping on each firmware independently.
@@ -76,16 +76,16 @@ have been tested with legally acquired game files.
 Это экспериментальная ветка для H700. Сборка ARM64/GLES2 не гарантирует
 запуск на конкретной прошивке без аппаратного теста.
 
-В \`portmaster/OpenUG2.sh\` можно изменять:
+В `portmaster/OpenUG2.sh` можно изменять:
 
-\`\`\`bash
+```bash
 RESOLUTION="640x480"
 WORLD_RADIUS="500"
-\`\`\`
+```
 
 После изменений **пересборка не нужна**. Радиус 500 м — это область загрузки
 мира, видимость примерно 300 м. Файл лога находится в папке игры:
-\`openug2/logs/OpenUG2.log\`. Ресурсы оригинальной игры добавляются пользователем
+`openug2/logs/OpenUG2.log`. Ресурсы оригинальной игры добавляются пользователем
 из собственной копии NFS Underground 2.
 
 Следующие задачи: реальный запуск на H700, измерения RAM/FPS, ограничение
