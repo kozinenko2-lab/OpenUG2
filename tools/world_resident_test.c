@@ -31,6 +31,8 @@ static void test_policy(void) {
     assert(!world_resident_policy_valid(&p));
     p.cell_size = 400.0f;
     assert(!world_resident_target(&p, NAN, 0.0f, 0.0f, 0.0f, center));
+    assert(world_resident_can_prepare_next(1, NULL));
+    assert(world_resident_can_prepare_next(0, NULL));
 }
 
 static void test_route_points(void) {
@@ -319,11 +321,18 @@ static void test_transactional_activation(void) {
     assert(active && candidate && active->generation == 2);
     assert(active->world.scene.meshes != old_meshes);
     assert(candidate->world.scene.meshes == old_meshes);
+    /* candidate becomes the retired previous owner after activation. A
+     * constrained target must wait for retirement before preparing a third
+     * world. Desktop/unlimited builds retain original scheduling. */
+    assert(!world_resident_can_prepare_next(1, candidate));
+    assert(world_resident_can_prepare_next(0, candidate));
     assert(world_ground_at(&active->world.scene, 1.0f, 1.0f, -9.0f, &z) ==
            WSURF_ROAD && nearf(z, 7.0f));
     assert(!memcmp(&player, &before, sizeof player));
 
     world_resident_free(candidate);
+    candidate = NULL;
+    assert(world_resident_can_prepare_next(1, candidate));
     world_resident_free(active);
 }
 
