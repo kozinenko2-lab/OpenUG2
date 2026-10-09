@@ -14,6 +14,24 @@
 static void grid_build(World *w);
 static void nav_build_adj(World *w);
 
+/* Cache namespace is stable across moving residents of the same bundle,
+ * but different for other tracks or game-data roots. This is an identity
+ * tag, NOT proof that two changed files contain identical bytes: asset
+ * files must be treated as immutable during a running session. */
+static uint64_t world_texture_scope_id(const char *root, const char *track) {
+    uint64_t hash = UINT64_C(14695981039346656037);
+    const char *parts[] = { root, track };
+    for (int part = 0; part < 2; part++) {
+        for (const unsigned char *p = (const unsigned char *)parts[part]; *p; p++) {
+            hash ^= *p;
+            hash *= UINT64_C(1099511628211);
+        }
+        hash ^= 255u; /* path/bundle separator prevents ambiguous pairs */
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
 static void world_scene_free(N2Scene *scene) {
     if (!scene) return;
     for (int i = 0; i < scene->count; i++) {
@@ -225,6 +243,7 @@ static int world_neighborhood_load_facade(World *w, const char *troot,
                                           const char *trackname,
                                           const WLoadOptions *options) {
     memset(&w->neighborhood, 0, sizeof w->neighborhood);
+    w->neighborhood.texture_scope = world_texture_scope_id(troot, trackname);
     const int instance_world = options && options->enabled;
     if (instance_world && !strcmp(trackname, "ALL")) {
         fprintf(stderr, "instance world requires one explicit STREAM bundle; "
@@ -470,21 +489,19 @@ static int world_texture_decode(const World *w, const WRegion *g,
     return ok;
 }
 
-/* ---- process-wide key -> GL texture cache ----
- * Neighboring residents request mostly the same textures. Keep the uploaded
- * images (and final misses) instead of decoding/uploading them on every swap.
- * The sources a key resolves against (region bundle, LOC4, master, common) are
- * bundle-global and identical for every neighborhood of one process -- a track
- * switch re-execs -- so a key's decoded result cannot change between builds.
- * ponytail: retain one bundle's visited keys until shutdown; add eviction if
- * multi-bundle in-process streaming makes this measured memory cost too large.
- * The cache owns the GL names; residents only borrow them. Any caller that
- * replaces the underlying archives in-process must call
- * world_texture_cache_clear() first (see tools/world_texture_test.c).
- * Frame-thread only, so it needs no locking: binding is part of the GL half of
- * a resident build, and the worker thread only prepares CPU data. */
+/* ---- process-wide (archive scope, texture key) -> GL cache ----
+ * Neighboring residents share texture names inside one authored STREAM bundle.
+ * However changing the track *in-process* can select different pixels/modes
+ * for an identical key. Track and game-data-root identity are both included
+ * in the lookup; a cache entry from one archive can never be reused for
+ * another. An old resident and a new resident may therefore coexist safely.
+ * Entry lifetime is still managed by the GL-thread cache and bounded LRU trim.
+ * Underlying asset files must not be mutated during a session; tests that
+ * rewrite fixtures under the same scope explicitly clear the cache first.
+ * Only GL-thread binding, no shared worker mutation. */
 typedef struct {
     uint32_t key;
+    uint64_t scope;           /* source bundle identity, not a GL owner */
     GLuint tex;
     unsigned char mode;
     unsigned char state;    /* 0 empty, 1 bound, 2 unresolvable */
@@ -498,25 +515,35 @@ static uint32_t g_texbind_build, g_texbind_pass;
 static size_t g_texcache_bytes;
 static uint64_t g_texcache_clock;
 
-/* Slot for `key`: an occupied entry, or the empty slot it belongs in.
- * NULL only if the table cannot grow -- fail the candidate, never create an
- * unowned GL name that its borrowing resident cannot release. */
-static WTexCacheEntry *world_texcache_slot(uint32_t key) {
+/* Hash must be identical in lookup, table growth and LRU rehash.
+ * Compare the original scope+key exactly after hashing, never hash only. */
+static uint32_t world_texcache_hash(uint64_t scope, uint32_t key) {
+    uint64_t h = scope ^ ((uint64_t)key * UINT64_C(0x9e3779b97f4a7c15));
+    h ^= h >> 33; h *= UINT64_C(0xff51afd7ed558ccd);
+    h ^= h >> 33;
+    return (uint32_t)h;
+}
+
+/* Slot for (scope,key): an occupied entry, or its empty slot.
+ * NULL only if table growth fails; the caller rejects the candidate. */
+static WTexCacheEntry *world_texcache_slot(uint64_t scope, uint32_t key) {
     if ((g_texcache_used + 1) * 4 >= g_texcache_cap * 3) {
         int cap = g_texcache_cap ? g_texcache_cap * 2 : 2048;
         WTexCacheEntry *t = (WTexCacheEntry *)calloc((size_t)cap, sizeof *t);
         if (!t) return NULL;
         for (int i = 0; i < g_texcache_cap; i++) {
             if (!g_texcache[i].state) continue;
-            uint32_t h = g_texcache[i].key & (uint32_t)(cap - 1);
+            uint32_t h = world_texcache_hash(g_texcache[i].scope,
+                                               g_texcache[i].key) & (uint32_t)(cap - 1);
             while (t[h].state) h = (h + 1) & (uint32_t)(cap - 1);
             t[h] = g_texcache[i];
         }
         free(g_texcache);
         g_texcache = t; g_texcache_cap = cap;
     }
-    uint32_t h = key & (uint32_t)(g_texcache_cap - 1);
-    while (g_texcache[h].state && g_texcache[h].key != key)
+    uint32_t h = world_texcache_hash(scope, key) & (uint32_t)(g_texcache_cap - 1);
+    while (g_texcache[h].state &&
+           (g_texcache[h].key != key || g_texcache[h].scope != scope))
         h = (h + 1) & (uint32_t)(g_texcache_cap - 1);
     return &g_texcache[h];
 }
@@ -587,7 +614,8 @@ int world_texture_cache_trim(const GLuint *protected_ids, int protected_count,
         for (int i = 0; i < g_texcache_cap; i++) {
             WTexCacheEntry e = g_texcache[i];
             if (!e.state) continue;
-            uint32_t h = e.key & (uint32_t)(g_texcache_cap - 1);
+            uint32_t h = world_texcache_hash(e.scope, e.key) &
+                         (uint32_t)(g_texcache_cap - 1);
             while (next[h].state) h = (h+1) & (uint32_t)(g_texcache_cap-1);
             next[h] = e;
             used++;
@@ -612,7 +640,8 @@ static int world_bind_key(World *w, const WRegion *g, uint32_t tk, int pass,
                            const N2Mesh *owner) {
     int *n = &binding->count;
     if (!tk || *n < 0 || *n >= cap) return 0;
-    WTexCacheEntry *e = world_texcache_slot(tk);
+    uint64_t scope = w->neighborhood.texture_scope;
+    WTexCacheEntry *e = world_texcache_slot(scope, tk);
     if (!e) { *n = -1; return 0; }
     if (e && e->state == 1) {                   /* decoded by an earlier build */
         if (e->build == binding->build) return 0;            /* already emitted */
@@ -624,8 +653,9 @@ static int world_bind_key(World *w, const WRegion *g, uint32_t tk, int pass,
         return 0;
     }
     if (e && e->state == 2) return 0;           /* known unresolvable */
-    if (e && e->pass == binding->source && e->key == tk) return 0; /* failed here */
-    if (e) { e->key = tk; e->pass = binding->source; }
+    if (e && e->pass == binding->source &&
+        e->key == tk && e->scope == scope) return 0; /* failed here */
+    if (e) { e->key = tk; e->scope = scope; e->pass = binding->source; }
     N2Tex tt = {0};   /* zero-init: n2_tpk_decode leaves dxt untouched */
     int ok = world_texture_decode(w, g, tk, &tt, pass);
     if (ok && !n2_tex_noise(&tt)) {
