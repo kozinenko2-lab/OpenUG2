@@ -16,9 +16,12 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
       pinning, conservative size estimates and asset-free GL regression.
 - [ ] Measure actual Mali texture memory / process RSS and tune the H700 default;
       soft budget does not limit CPU mesh buffers or peak overlapping residents.
-- [ ] Ensure texture key resolution is scoped by track/archive identity across
-      in-process track switches (upstream cache assumes track switches re-exec).
-      Add synthetic two-track same-key/different-image regression.
+- [x] Scope all GPU texture-cache lookups and misses to game-data root and
+      STREAM bundle; add synthetic red/green same-key cross-track regression.
+- [ ] Confirm in-process track-switch correctness with legally owned NFSU2
+      assets and real H700 GPU while previous/new residents overlap.
+- [ ] Support hot-reloading changed files under the same bundle identity
+      (currently archives must remain immutable during a game session).
 - [ ] Validate collision arrays and async resident replacement across region swaps.
 
 **Gate:** Device-tested playable roaming loop + logs and measured memory headroom.
