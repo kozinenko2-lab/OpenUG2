@@ -25,6 +25,17 @@ Knulli differ in their SDL video stack and runtime libraries.
   Driver memory, GPU buffers and temporary CPU decoded textures are excluded.
 - Asset-free GL regression confirms inactive GL names are deleted but pinned
   active resident names remain valid.
+- When `--texture-cache-mb` is nonzero, resident streaming waits for the
+  previous detached resident to finish frame-sliced retirement before starting
+  another. This avoids transient **three-resident** CPU/GPU ownership; desktop
+  builds with a zero budget retain their existing scheduling. There can still
+  be two live residents (active + candidate). Fast driving may experience a
+  short delay at a cell boundary while retirement completes.
+- On Linux, the game logs `resident memory phase=...` after retirement,
+  at activation and every 600 frames in low-memory mode. `rss` is the
+  resident set reported by `/proc/self/statm`, and `peak` comes from
+  `getrusage(RUSAGE_SELF)`; both are in KiB. These metrics track *process
+  pages*, not Mali VRAM, and do not measure driver-internal GPU memory.
 - The world-texture cache now keys entries by **(game-data root, STREAM
   bundle, texture key)** instead of the texture key alone. Changing tracks
   in-process cannot borrow pixels from an older track with a colliding key.
