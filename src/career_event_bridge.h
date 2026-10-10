@@ -17,6 +17,10 @@ int ug2_career_select(const UG2CareerIndex *catalog, const char *race_id,
  * route/stage matches. An ambiguous route must be selected by exact ID. */
 int ug2_career_unique_route(const UG2CareerIndex *catalog, unsigned stage,
                             uint16_t route_id, UG2CareerSelection *out);
+/* Prove the actual AI circuit file (ROUTES..../PathsNNNN.bin) matches
+ * the selected original WorldEvent ID. Never infer it from an AI filename. */
+int ug2_career_path_matches(const UG2CareerSelection *selected,
+                            const char *circuit_path);
 /* Untrusted solo gate-crossing, free roam, and ghost AI must never award money.
  * Caller must establish both original world_race.finished and first place
  * in a real AI race. Never changes a Career on rejection. */
