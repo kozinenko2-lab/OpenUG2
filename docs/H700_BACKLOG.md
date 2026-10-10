@@ -44,7 +44,15 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
 
 ## P2: Native career and persistence
 
-- [ ] Design versioned internal profile for money, garage, progress, unlocks and tuning.
+- [x] Add independent versioned v1 career profile with checksum, safe rename,
+      backup recovery, credits, unique race achievements and stage counters.
+- [x] Connect confirmed legacy circuit-AI first-place win to one-time
+      prototype payout; display career stage/cash in pre-race UI and HUD.
+- [ ] Classify authored race IDs, URL and sponsorship contracts from actual
+      game assets; current auto-award is restricted to existing AI circuits.
+- [ ] Design persistent garage ownership, purchased modifications, tuning,
+      event unlock registry and save-schema upgrade.
+- [ ] Validate stage gate requirements and retail payouts against game behavior.
 - [ ] Crash-safe atomic save, backup and failed-checksum handling; no retail save overwrite.
 - [ ] Implement payouts, sponsors, unlocks, shops, car purchases and upgrades.
 - [ ] Career stages and authored story progression; final Caleb event and ending.

@@ -45,6 +45,11 @@ jobs:
             set -e
             test "$code" -eq 2 || { cat /tmp/invalid-radius.log; exit 1; }
           done
+          set +e
+          ./nfsu2 --career-save > /tmp/missing-career-path.log 2>&1
+          career_code=$?
+          set -e
+          test "$career_code" -eq 2 || { cat /tmp/missing-career-path.log; exit 1; }
           for bad in abc -1 1025 999999999999; do
             set +e
             ./nfsu2 /tmp/no-nfsu2-data --texture-cache-mb "$bad" > /tmp/invalid-cache.log 2>&1
@@ -62,6 +67,7 @@ jobs:
           make district-collision-test
           make world-instance-test
           make world-resident-test
+          make career-test
           make car-material-test
       - name: GL-backed texture cache regression without game assets
         env:

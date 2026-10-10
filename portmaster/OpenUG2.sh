@@ -34,7 +34,7 @@ if [ -f /opt/system/Tools/PortMaster/portmaster.sh ]; then
 fi
 
 LOGDIR="$GAMEDIR/logs"
-mkdir -p "$LOGDIR" || exit 1
+mkdir -p "$LOGDIR" "$GAMEDIR/saves" || exit 1
 LOGFILE="$LOGDIR/OpenUG2.log"
 exec >"$LOGFILE" 2>&1
 printf 'OpenUG2 H700 launcher\n'
@@ -74,6 +74,7 @@ fi
     --resolution "$RESOLUTION" \
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
+    --career-save "$GAMEDIR/saves/career.dat" \
     --track "$TRACK" \
     --car "$CAR" \
     --traffic "$TRAFFIC" \
