@@ -38,6 +38,17 @@ int main(void) {
     const CareerSourceRace *found=NULL;
     assert(ug2_career_resolve_circuit_for_profile(
         cat,&c,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    /* A damaged/hand-edited save with B but no A may never unlock the
+     * retail stage-1 event; all hashed ancestors must be present. */
+    Career orphan;career_init(&orphan);
+    assert(career_record_original_prologue(&orphan,b->id));
+    assert(ug2_prologue_state(cat,&orphan,b->id)==UG2_PROLOGUE_LOCKED);
+    assert(ug2_career_resolve_circuit_for_profile(
+        cat,&orphan,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    assert(career_record_original_prologue(&orphan,a->id));
+    assert(ug2_prologue_state(cat,&orphan,b->id)==UG2_PROLOGUE_DONE);
+    assert(ug2_career_resolve_circuit_for_profile(
+        cat,&orphan,1,4013,intro->id,3,3,&found)==UG2_BIND_MATCH);
 
     char dir[]="/tmp/openug2-prologue-XXXXXX";
     assert(mkdtemp(dir));
