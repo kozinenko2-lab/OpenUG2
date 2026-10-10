@@ -9835,6 +9835,14 @@ int main(int argc, char **argv) {
                 draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
                           0.12f,0.012f,0.02f);
             }
+            if (career_save_path && career_selection_ready && race_state==3) {
+                char prize_label[160];
+                snprintf(prize_label,sizeof prize_label,"EVENT %s %u CASH",
+                         career_selection.race.id,career_selection.race.cash_value);
+                glUniform3f(uColor,0.88f,0.79f,0.45f);
+                draw_text(&quad,uMVP,prize_label,-text_width(prize_label,0.010f)/2,
+                          0.06f,0.010f,0.018f);
+            }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
             float M[16]={0.5f,0,0,0, 0,0.06f,0,0, 0,0,1,0, -0.25f,-0.25f,0,1};
