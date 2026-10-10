@@ -85,6 +85,13 @@ jobs:
           make ug2-trigger-probe
           file build/ug2_trigger_probe
           readelf -h build/ug2_trigger_probe | grep -q AArch64
+          make ug2-trigger-probe-static
+          file build/ug2_trigger_probe.static
+          readelf -h build/ug2_trigger_probe.static | grep -q AArch64
+          if readelf -l build/ug2_trigger_probe.static | grep -q INTERP; then
+            echo 'static trigger probe unexpectedly needs a dynamic loader'
+            exit 1
+          fi
           make ug2-career-binding-test
           make ug2-career-credit-test
           make ug2-prologue-test
@@ -103,4 +110,5 @@ jobs:
           path: |
             nfsu2
             build/ug2_trigger_probe
+            build/ug2_trigger_probe.static
           retention-days: 7
