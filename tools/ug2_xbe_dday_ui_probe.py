@@ -10,7 +10,7 @@ import json
 import struct
 from pathlib import Path
 
-from ug2_xbe_dday_flow_probe import KNOWN_SHA256 as EXPECTED_SHA256
+EXPECTED_SHA256 = "c8cab1bfe7cf26553e84eb4ef2a26d16f6b06260f7494c583802bc00fd81dd31"
 
 def xbe_load(path: Path):
     """Map raw XBE sections to game virtual addresses, read-only."""
