@@ -52,6 +52,7 @@ int career_source_decode_race(const uint8_t *d, size_t len,
     if (reward<0) return 0;
     next.cash_value=(uint32_t)reward;
     next.icon_type=d[0x34];
+    next.behavior=d[0x0f];
     next.stage=d[0x37];
     next.num_stages=d[0x7e];
     next.opponents=d[0x7c];
