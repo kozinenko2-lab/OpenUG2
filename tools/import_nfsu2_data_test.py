@@ -84,6 +84,17 @@ def main():
         check("re-run without --force refuses", code == 4, log)
         code, log = run("--source", src, "--output", out, "--force")
         check("re-run with --force succeeds", code == 0, log)
+        # A hostile symlink under a previously generated destination must
+        # never be followed while running --force (original source remains safe).
+        linked_dst = os.path.join(out, "TRACKS/STREAML4RA.BUN")
+        os.unlink(linked_dst)
+        os.symlink(os.path.join(src, "TRACKS/STREAML4RA.BUN"), linked_dst)
+        code, log = run("--source", src, "--output", out, "--force")
+        check("force refuses symlinked destination file", code == 1, log)
+        check("force never touches source file", tree_state(src) == before)
+        os.unlink(linked_dst)
+        shutil.copy2(os.path.join(src, "TRACKS/STREAML4RA.BUN"), linked_dst)
+
 
         code, log = run("--source", src, "--output", os.path.join(src, "TRACKS/out"))
         check("output inside source refused", code == 4, log)
@@ -111,6 +122,11 @@ def main():
         make_install(sym, symlink_file=True)
         code, log = run("--source", sym, "--output", os.path.join(tmp, "out3"))
         check("symlinked source file refused", code == 1, log)
+        os.unlink(os.path.join(sym, "TRACKS/evil.bin"))
+        os.symlink("/etc", os.path.join(sym, "TRACKS/evil-directory"))
+        code, log = run("--source", sym, "--output", os.path.join(tmp, "out4"))
+        check("symlinked source directory refused", code == 1, log)
+
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
