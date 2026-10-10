@@ -44,6 +44,15 @@ int main(void) {
     assert(ug2_career_resolve_circuit(c,3,4081,"S3_H_CIRCUIT_11",2,3,&found)==UG2_BIND_MATCH);
     /* URL, sponsored race and drift are discoverable on the map but cannot
      * be paid as if they were the legacy circuit game mode. */
+    /* Retail stage 1 opens a 3-lap, 3-opponent circuit on Paths4013.bin.
+     * The game must discover these values BEFORE arming a race, then verify
+     * the same values at the finish. */
+    add(c,"STAGE_1_CIRCUIT_1",4013,1,3,3,3)->cash_value=250;
+    assert(ug2_career_resolve_circuit(c,1,4013,NULL,0,0,&found)==UG2_BIND_MATCH);
+    assert(found && found->laps[0]==3 && found->opponents==3 &&
+           found->cash_value==250);
+    assert(ug2_career_resolve_circuit(c,1,4013,NULL,3,3,&found)==UG2_BIND_MATCH);
+    assert(ug2_career_resolve_circuit(c,1,4013,NULL,2,3,&found)==UG2_BIND_NO_MATCH);
     add(c,"S3_SPON_CIRCUIT_12",4083,3,2,3,1);
     add(c,"S3_URL_12",4711,3,4,5,2);
     add(c,"S3_DRIFT_12",4312,3,3,0,3);
