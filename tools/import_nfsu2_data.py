@@ -50,6 +50,9 @@ def validate_source(source):
     missing = []
     for name, required in DATA_DIRS:
         path = os.path.join(source, name)
+        if os.path.islink(path):
+            errors.append("unsafe symbolic link in source: %s/" % name)
+            continue
         if os.path.isdir(path):
             continue
         if required:
@@ -77,6 +80,8 @@ def copy_dirs(source, output, force, dry_run):
         if not os.path.isdir(src):
             continue
         dst = os.path.join(output, name)
+        if os.path.islink(src) or os.path.islink(dst):
+            raise ValueError("refusing symbolic-link data directory: %s" % name)
         if dry_run:
             print("would copy %s/ -> %s/" % (name, dst))
             continue
@@ -85,15 +90,23 @@ def copy_dirs(source, output, force, dry_run):
                 raise FileExistsError(dst)
         else:
             os.makedirs(dst, exist_ok=True)
-        for root, _dirs, files in os.walk(src):
+        for root, dirs, files in os.walk(src):
+            for child in dirs:
+                if os.path.islink(os.path.join(root, child)):
+                    raise ValueError("refusing symlinked source directory: %s" %
+                                     os.path.join(root, child))
             rel = os.path.relpath(root, src)
             target_root = dst if rel == "." else os.path.join(dst, rel)
+            if os.path.islink(target_root):
+                raise ValueError("refusing symlinked output directory: %s" % target_root)
             os.makedirs(target_root, exist_ok=True)
             for f in files:
                 s = os.path.join(root, f)
                 if os.path.islink(s):
                     raise ValueError("refusing to copy symlink: %s" % s)
                 t = os.path.join(target_root, f)
+                if os.path.islink(t):
+                    raise ValueError("refusing symlinked output file: %s" % t)
                 shutil.copy2(s, t)
                 copied += 1
                 bytes_total += os.path.getsize(s)
