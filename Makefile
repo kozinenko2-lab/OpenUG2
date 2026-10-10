@@ -128,6 +128,17 @@ career-garage-test: tools/career_garage_test.c src/career.c src/career.h
 	./build/career_garage_test
 .PHONY: career-garage-test
 
+ug2-career-file-test: tools/ug2_career_file_test.c src/ug2_career_file.c src/ug2_career_file.h src/career_source_catalog.c src/career_source_catalog.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Isrc tools/ug2_career_file_test.c src/ug2_career_file.c src/career_source_catalog.c -o build/ug2_career_file_test
+	./build/ug2_career_file_test
+.PHONY: ug2-career-file-test
+
+ug2-career-dump: tools/ug2_career_dump.c src/ug2_career_file.c src/ug2_career_file.h src/career_source_catalog.c src/career_source_catalog.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Isrc tools/ug2_career_dump.c src/ug2_career_file.c src/career_source_catalog.c -o build/ug2_career_dump
+.PHONY: ug2-career-dump
+
 career-source-test: tools/career_source_catalog_test.c src/career_source_catalog.c src/career_source_catalog.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Isrc tools/career_source_catalog_test.c src/career_source_catalog.c -o build/career_source_catalog_test
