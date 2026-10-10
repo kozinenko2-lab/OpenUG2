@@ -57,27 +57,35 @@ unsigned ug2_career_map_count(const UG2CareerIndex *cat,
     }
     return count;
 }
-/* GlobalLib eUnlockCondition values:
- * 0 SPECIFIC_RACE_WON    (hashed prerequisite needs a verified dependency)
- * 1 AT_STAGE_START      (the +0x10 byte names the previous stage)
- * 2 SPONSOR_CHOSEN
- * 3 REQUIRED_RACES_WON
- * 4 REQUIRED_URL_WON
- * Do not treat a selectable Paths route or --career-race as proof of unlock.
- * This stage-start rule is limited to the byte pattern verified in the
- * original PC UG2 GlobalB.lzc; unsupported conditions fail closed. */
-static int original_circuit_stage_start(const CareerSourceRace *r,
-                                         unsigned stage) {
-    return r && stage>=2 && stage<=5 &&
-           r->unlock_method==1 &&
-           r->required_specific_url==stage-1 &&
-           r->sponsor_gate==0 &&
-           r->required_races==0 && r->required_urls==0;
+/* The four bytes at +0x10 are a UNION in GCareerRace, not four
+ * independent gates: method 0 uses all four bytes as a predecessor hash;
+ * method 1 uses only the low byte as the previous-stage marker.
+ * A predecessor's presence in GlobalB is NOT proof of a completed race.
+ * Only the saved canonical original ID in a verified career can unlock it.
+ * Sponsors, race-count and URL-count methods remain deliberately locked. */
+static int original_circuit_unlocked(const UG2CareerIndex *cat,
+                                      const Career *profile,
+                                      const CareerSourceRace *r,
+                                      unsigned stage) {
+    if(!cat || !r || (profile && profile->stage!=stage)) return 0;
+    if(r->unlock_method==1)
+        return stage>=2 && stage<=5 &&
+               r->required_specific_url==stage-1 &&
+               r->sponsor_gate==0 && r->required_races==0 &&
+               r->required_urls==0;
+    if(r->unlock_method==0 && profile && r->prerequisite_key) {
+        const CareerSourceRace *pre=ug2_career_prerequisite(cat,r);
+        return pre && pre!=r && pre->stage<=stage &&
+               career_has_win(profile,"UG2_ORIGINAL",pre->id,CAREER_WORLD);
+    }
+    return 0;
 }
-static int original_circuit_supported(const CareerSourceRace *r,
+static int original_circuit_supported(const UG2CareerIndex *cat,
+                                       const Career *profile,
+                                       const CareerSourceRace *r,
                                        unsigned stage,unsigned route,
                                        unsigned laps,unsigned opponents) {
-    if(!r || !original_circuit_stage_start(r,stage) ||
+    if(!r || !original_circuit_unlocked(cat,profile,r,stage) ||
        r->stage!=stage || r->icon_type!=3 ||
        r->behavior!=0 || r->is_hidden!=0 ||
        r->num_stages!=1 || r->track_ids[0]!=route ||
@@ -89,9 +97,9 @@ static int original_circuit_supported(const CareerSourceRace *r,
     /* Accept only plain, non-hidden regular circuits with a canonical
      * retail identifier. Hidden events, sponsors, SUV and other types
      * require separate unlock checks and dedicated gameplay systems.
-     * This resolver intentionally rejects SPECIFIC_RACE_WON (including the
-     * stage-1 intro circuit) until prerequisite hash tracking exists.
-     * Passing --career-race NEVER bypasses those gates. */
+     * SPECIFIC_RACE_WON requires an unambiguous catalog predecessor and a
+     * previously verified, persisted win in the supplied profile.
+     * Passing --career-race NEVER bypasses these gates. */
     char prefix[32];
     int n=stage==1?snprintf(prefix,sizeof prefix,"STAGE_1_CIRCUIT_")
                   :snprintf(prefix,sizeof prefix,"S%u_CIRCUIT_",stage);
@@ -102,8 +110,9 @@ static int original_circuit_supported(const CareerSourceRace *r,
     for(;*p;p++) if(*p<'0' || *p>'9') return 0;
     return 1;
 }
-UG2BindResult ug2_career_resolve_circuit(
-    const UG2CareerIndex *cat,unsigned stage,unsigned route,
+UG2BindResult ug2_career_resolve_circuit_for_profile(
+    const UG2CareerIndex *cat,const Career *profile,
+    unsigned stage,unsigned route,
     const char *race_id,unsigned laps,unsigned opponents,
     const CareerSourceRace **found) {
     if(found)*found=NULL;
@@ -112,7 +121,7 @@ UG2BindResult ug2_career_resolve_circuit(
     const CareerSourceRace *selected=NULL;
     for(unsigned i=0;i<cat->unique_races;i++) {
         const CareerSourceRace *r=&cat->race[i];
-        if(!original_circuit_supported(r,stage,route,laps,opponents))continue;
+        if(!original_circuit_supported(cat,profile,r,stage,route,laps,opponents))continue;
         if(race_id && *race_id && strcmp(r->id,race_id))continue;
         if(selected)return UG2_BIND_AMBIGUOUS;
         selected=r;
@@ -120,4 +129,13 @@ UG2BindResult ug2_career_resolve_circuit(
     if(!selected)return UG2_BIND_NO_MATCH;
     *found=selected;
     return UG2_BIND_MATCH;
+}
+
+/* Legacy read-only discovery cannot assume a predecessor has been won. */
+UG2BindResult ug2_career_resolve_circuit(
+    const UG2CareerIndex *cat,unsigned stage,unsigned route,
+    const char *race_id,unsigned laps,unsigned opponents,
+    const CareerSourceRace **found) {
+    return ug2_career_resolve_circuit_for_profile(cat,NULL,stage,route,
+                                                   race_id,laps,opponents,found);
 }
