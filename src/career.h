@@ -58,6 +58,13 @@ int career_record_cover(Career *c, const char *location, unsigned stars);
 int career_has_win(const Career *c, const char *track, const char *event,
                    CareerEventKind kind);
 
+/* Store only an independently verified original DDAY scripted completion.
+ * The caller MUST establish true script completion. Stage-0 events have no
+ * laps or opponents; this does not fake competitive wins or alter money,
+ * career stage or race counters. Canonical domain allows hashed unlock checks
+ * to use career_has_win(profile,"UG2_ORIGINAL",id,CAREER_WORLD). */
+int career_record_original_prologue(Career *c, const char *id);
+
 /* Garage inventory shares the career save: purchases never change cash
  * without changing ownership in the same transaction. All game-facing
  * callers must save a copy before publishing the change in RAM.
