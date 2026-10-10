@@ -27,6 +27,13 @@ int main(void){
     Career profile;career_init(&profile);
     assert(ug2_career_select(c,"STAGE_1_CIRCUIT_1",1,&s));
     assert(s.route_id==4001 && s.race.cash_value==250 && s.kind==CAREER_WORLD);
+    assert(ug2_career_path_matches(&s,"ROUTESL4RF/Paths4001.bin"));
+    assert(ug2_career_path_matches(&s,"ROUTESL4RF\\Paths4001.bin"));
+    assert(!ug2_career_path_matches(&s,"ROUTESL4RF/Paths4002.bin"));
+    assert(!ug2_career_path_matches(&s,"ROUTESL4RF/Paths4001.bin.bak"));
+    assert(!ug2_career_path_matches(&s,"ROUTESL4RF/Paths4001F.bin"));
+    assert(!ug2_career_path_matches(&s,"wrong4001.bin"));
+    assert(!ug2_career_path_matches(&s,"ROUTESL4RF/Paths655360.bin"));
     last=s;
     assert(!ug2_career_select(c,"STAGE_1_CIRCUIT_1",2,&s));
     assert(!memcmp(&s,&last,sizeof s));
