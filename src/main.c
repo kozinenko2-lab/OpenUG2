@@ -41,6 +41,8 @@
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
+#include "ug2_career_file.h" /* original PC GlobalB career database */
+#include "career_race_binding.h" /* verified route-to-original-race checks */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2085,6 +2087,7 @@ int main(int argc, char **argv) {
     const char *circuit = "ROUTESL4RF/Paths4602.bin"; int explicit_circuit = 0;
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
+    const char *career_race_override = NULL; /* optional original ID for duplicate route */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2140,6 +2143,13 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-race")) {
+            if (i+1 >= argc || !argv[i+1][0] || strlen(argv[i+1])>=CAREER_SOURCE_NAME) {
+                fprintf(stderr,"--career-race requires an original race identifier\n");
+                return 2;
+            }
+            career_race_override = argv[++i];
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -5888,7 +5898,8 @@ int main(int argc, char **argv) {
     /* race flow: 0 = countdown, 1 = driving, 2 = finished.  The temporary
        synthetic frontend is opt-in (`make menu`); normal builds boot directly
        into the authored free-roam pose until the real menu asset work is ready. */
-    const int COUNTDOWN = 180, LAP_TARGET = 2;
+    const int COUNTDOWN = 180;
+    int LAP_TARGET = 2; /* upgraded from original GlobalB for a verified circuit */
 #ifdef OPENUG2_MENU
     int race_state = (shot || resident_route_audit || resident_drive_audit) ? 1 : 3;
 #else
@@ -5897,6 +5908,7 @@ int main(int argc, char **argv) {
     int racetimer = 0, finish_place = 0;
     Career career;
     career_init(&career);
+    UG2CareerIndex *original_career = NULL;
     if (career_save_path) {
         int loaded = career_load(&career, career_save_path);
         printf("career profile: %s stage=%u cash=%u unique-wins=%u "
@@ -5905,6 +5917,40 @@ int main(int argc, char **argv) {
                career.stage, career.money, career.total_wins,
                career.world_wins, career.sponsor_wins,
                career.url_wins, career.dvd_covers);
+        /* Load ONLY locally owned original PC Underground 2 GlobalB.
+         * The catalog is read-only: no game data is committed or modified. */
+        original_career = (UG2CareerIndex *)calloc(1, sizeof *original_career);
+        if(original_career) {
+            char source_path[1024];
+            snprintf(source_path,sizeof source_path,"%s/GLOBAL/GlobalB.lzc",dataroot);
+            if(!ug2_career_load_file(source_path,original_career)) {
+                snprintf(source_path,sizeof source_path,"%s/GLOBAL/GLOBALB.BUN",dataroot);
+                if(!ug2_career_load_file(source_path,original_career)) {
+                    free(original_career);
+                    original_career=NULL;
+                }
+            }
+            if(original_career) {
+                printf("original career: %u unique races / %u original records, "
+                       "%u sections, stage=%u\n",
+                       original_career->unique_races,
+                       original_career->total_race_records,
+                       original_career->career_sections,career.stage);
+                int linked=0,ambiguous=0;
+                for(int e=0;e<world.city.nev;e++) {
+                    unsigned count=career_event_candidates(original_career,
+                        career.stage,(unsigned)world.city.ev[e].id);
+                    if(count){linked++;if(count>1)ambiguous++;}
+                    if(want_event_id && world.city.ev[e].id==want_event_id)
+                        printf("original career map event %d: %u authored "
+                               "record(s), no cash for solo event gates\n",
+                               want_event_id,count);
+                }
+                printf("career map: %d linked route IDs; %d ambiguous "
+                       "(route match is not a completed race)\n",linked,ambiguous);
+            } else fprintf(stderr,"career: no valid original GlobalB catalog; "
+                                  "prototype payouts disabled\n");
+        }
     }
 #ifdef OPENUG2_MENU
     Fe frontend;
@@ -6367,6 +6413,28 @@ int main(int argc, char **argv) {
                         }
                         nai=ncirc?load_roaming_circuit(dataroot,circlist[selcirc],
                             &scene,&aipath,ais,carpos,&start_idx):0;
+                        LAP_TARGET=2;
+                        if(original_career && ncirc>0 && selcirc>=0 && selcirc<ncirc) {
+                            const CareerSourceRace *authored=NULL;
+                            for(unsigned lap=1;lap<=8;lap++) {
+                                const CareerSourceRace *candidate=
+                                    career_resolve_circuit(original_career,career.stage,
+                                        circlist[selcirc],lap,(unsigned)(nai>0?nai:0),
+                                        career_race_override);
+                                if(candidate) {
+                                    if(authored){authored=NULL;break;}
+                                    authored=candidate;
+                                }
+                            }
+                            if(authored) {
+                                LAP_TARGET=authored->laps[0];
+                                printf("career: selected original %s, Paths%u, "
+                                       "%d laps, %d opponents, reward %u\n",
+                                       authored->id,authored->track_ids[0],
+                                       LAP_TARGET,nai,authored->cash_value);
+                            } else printf("career: circuit is not an unambiguous "
+                                          "regular authored race; reward blocked\n");
+                        }
                         ai_race=1;race_state = 0; racetimer = 0;   /* -> 3-2-1 countdown */
                     }
                 }
@@ -8028,27 +8096,33 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
-            /* Only a confirmed FIRST PLACE over actual circuit opponents may
-             * affect the career. Event-free roam and solo scripted-event
-             * gate completion are NOT valid career wins. Event IDs and retail
-             * payout tables are not verified yet. The prototype 500-unit award
-             * is deliberately limited to the existing completed AI circuit. */
-            if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
-                selcirc>=0 && selcirc<ncirc && aipath.n>1) {
-                Career updated = career;
-                if (career_record_win(&updated, trackname, circlist[selcirc],
-                                      CAREER_WORLD, finish_place, nai, 500)) {
-                    int promoted = career_advance_stage(&updated);
-                    if (career_save(&updated,career_save_path)) {
-                        career = updated;
-                        printf("career verified circuit victory: %s stage=%u "
-                               "new-world-wins=%u cash=%u%s\n",
-                               circlist[selcirc], career.stage,
-                               career.world_wins, career.money,
-                               promoted ? " [STAGE UNLOCKED]" : "");
-                    } else fprintf(stderr,"career save failed: %s\n",
-                                   career_save_path);
-                } else printf("career replay: already counted, no duplicate cash\n");
+            /* No guessed 500-credit award: require authenticated track ID,
+             * currently-selected stage, NORMAL circuit subtype, authored
+             * laps and actual opponent count plus first-place finish.
+             * No auto stage promotion while original sponsor/URL gates
+             * and boss transitions have not been faithfully implemented. */
+            if (career_save_path && original_career && finish_place==1 &&
+                nai>0 && ncirc>0 && selcirc>=0 && selcirc<ncirc && aipath.n>1) {
+                const CareerSourceRace *race=
+                    career_resolve_circuit(original_career,career.stage,
+                        circlist[selcirc],(unsigned)LAP_TARGET,(unsigned)nai,
+                        career_race_override);
+                if(race) {
+                    Career updated=career;
+                    if(career_record_win(&updated,trackname,race->id,
+                                         CAREER_WORLD,finish_place,nai,
+                                         race->cash_value)) {
+                        if(career_save(&updated,career_save_path)) {
+                            career=updated;
+                            printf("career authored win: %s stage=%u "
+                                   "reward=%u total-cash=%u\n",
+                                   race->id,career.stage,race->cash_value,
+                                   career.money);
+                        } else fprintf(stderr,"career save failed: %s\n",
+                                       career_save_path);
+                    } else printf("career replay: already counted, no duplicate cash\n");
+                } else printf("career: no verified original event binding; "
+                              "zero payout\n");
             }
         }
 
