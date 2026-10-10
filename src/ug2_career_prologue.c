@@ -35,11 +35,11 @@ UG2PrologueState ug2_prologue_state(
         cat,"DDAY_EVENT_B",ug2_career_bin_hash("DDAY_EVENT_A"));
     if(!a || !b || ug2_career_prerequisite(cat,b)!=a)
         return UG2_PROLOGUE_INVALID;
-    if(career_has_win(profile,"UG2_ORIGINAL",id,CAREER_WORLD))
-        return UG2_PROLOGUE_DONE;
     if(!strcmp(id,"DDAY_EVENT_B") &&
        !career_has_win(profile,"UG2_ORIGINAL","DDAY_EVENT_A",CAREER_WORLD))
         return UG2_PROLOGUE_LOCKED;
+    if(career_has_win(profile,"UG2_ORIGINAL",id,CAREER_WORLD))
+        return UG2_PROLOGUE_DONE;
     return UG2_PROLOGUE_READY;
 }
 UG2PrologueResult ug2_prologue_record_verified_finish(
