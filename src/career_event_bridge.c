@@ -59,6 +59,24 @@ int ug2_career_unique_route(const UG2CareerIndex *catalog,unsigned stage,
     }
     return fill(found,stage,out);
 }
+int ug2_career_path_matches(const UG2CareerSelection *selected,
+                            const char *path) {
+    if(!selected || !path || !selected->route_id)return 0;
+    const char *base=strrchr(path,'/');
+    const char *backslash=strrchr(path,'\\');
+    if(!base || (backslash && backslash>base))base=backslash;
+    base=base?base+1:path;
+    if(strncmp(base,"Paths",5))return 0;
+    const char *p=base+5;
+    if(*p<'0' || *p>'9')return 0;
+    unsigned id=0;
+    while(*p>='0' && *p<='9') {
+        id=id*10u+(unsigned)(*p-'0');
+        if(id>65535u)return 0;
+        p++;
+    }
+    return id==selected->route_id && strcmp(p,".bin")==0;
+}
 int ug2_career_award(Career *profile,const UG2CareerSelection *selected,
                      uint16_t world_route_id,int world_finished,
                      int verified_ai_finish,int finish_place,int ai_opponents) {
