@@ -4,19 +4,21 @@ import tempfile
 from pathlib import Path
 from ug2_xbe_dday_ui_probe import (
     analyze, hash_id, confirmation_parameter, intro_state_active,
-    CALLS, SIGNATURES,
+    CALLS, SIGNATURES, resume_event_hash,
 )
 
 def main():
     assert hash_id("ACCEPT_BUTTON") == 0xD72F002A
     assert hash_id("CANCEL_BUTTON") == 0x63857DE0
     assert hash_id("Accept_Button") != hash_id("ACCEPT_BUTTON")
-    assert len(CALLS) == 10
-    assert len(SIGNATURES) == 12
+    assert len(CALLS) == 17
+    assert len(SIGNATURES) == 17
     expected = (0, 0, 1, 0)
     actual = tuple(confirmation_parameter(flag, done)
                    for flag in (False, True) for done in (False, True))
     assert actual == expected
+    assert resume_event_hash(False) == 0xDD60E402
+    assert resume_event_hash(True) == 0xDD60E403
     assert not intro_state_active(0)
     assert not intro_state_active(9)
     assert all(intro_state_active(i) for i in range(1, 9))
