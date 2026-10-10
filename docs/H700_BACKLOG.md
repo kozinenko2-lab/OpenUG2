@@ -9,6 +9,10 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
 - [x] Runtime 640x480 resolution and 500m resident world radius controls.
 - [x] SDL_GameController car input and optional known H700 mapping.
 - [x] Native ARM64 build regression CI established (see Actions result).
+- [x] Adopt Detoy R36S multi-CFW PortMaster startup conventions: get_controls,
+      mods, firmware SDL mappings, pm_platform_helper, per-architecture libs.
+- [x] Add source-attributed R36S PC retail-data importer with synthetic
+      directory/symlink validation, without copying game assets into Git.
 - [ ] Build with a release-compatible H700 libc/sysroot (Ubuntu CI ELF is not a console release).
 - [ ] Run on RG40XX H/MuOS, verify real Mali EGL/GLES2, fullscreen, sound, controller.
 - [ ] Capture FPS frame-time median/p99 and peak RSS while driving + changing cells.
@@ -59,6 +63,11 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
 - [ ] Apply purchased performance tiers to real car physics and store cosmetics.
 - [ ] Add shop inventory/pricing/unlock registry verified against source game
       data; do not treat arbitrary available CARS folders as owned/unlocked.
+- [x] Implement asset-free C record decoder for extracted CareerManager
+      0x80034A10 container: GCareerRace, GCareerStage, Sponsor, source-verified
+      offsets and bounded record parsing from NFSTools/GlobalLib.
+- [ ] Parse/decompress the outer PC GlobalB.lzc tree and locate CareerManager,
+      resolve hashed event names, validate against legally owned game assets.
 - [ ] Build authored event unlock registry and source-verified race rewards.
 - [ ] Validate stage gate requirements and retail payouts against game behavior.
 - [ ] Crash-safe atomic save, backup and failed-checksum handling; no retail save overwrite.
