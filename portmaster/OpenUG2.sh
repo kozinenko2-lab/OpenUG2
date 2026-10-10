@@ -9,6 +9,9 @@ TRAFFIC="0"
 # Leave blank to select only a UNIQUE matching original career event.
 # Set to an exact ID from your own GlobalB (e.g. STAGE_1_CIRCUIT_1).
 CAREER_RACE=""
+# Optional exact ROUTES.../PathsNNNN.bin entry for a named career event.
+# Leave empty to select a track interactively using the game's menu.
+CAREER_CIRCUIT=""
 # Drop this optional plain-text file into ports/openug2/mods/ on the SD card.
 CAREER_BALANCE_FILE="mods/career_rewards.csv"
 
@@ -119,6 +122,9 @@ fi
 EXTRA_CAREER_ARGS=()
 if [ -n "$CAREER_RACE" ]; then
     EXTRA_CAREER_ARGS+=(--career-race "$CAREER_RACE")
+fi
+if [ -n "$CAREER_CIRCUIT" ]; then
+    EXTRA_CAREER_ARGS+=(--circuit "$CAREER_CIRCUIT")
 fi
 if [ -n "$CAREER_BALANCE_FILE" ] && [ -f "$GAMEDIR/$CAREER_BALANCE_FILE" ]; then
     EXTRA_CAREER_ARGS+=(--career-balance "$GAMEDIR/$CAREER_BALANCE_FILE")
