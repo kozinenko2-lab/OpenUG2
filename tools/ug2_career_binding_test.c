@@ -31,7 +31,10 @@ int main(void) {
     assert(found && found->cash_value==350);
     assert(ug2_career_resolve_circuit(c,2,4081,NULL,2,3,&found)==UG2_BIND_NO_MATCH && !found);
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,1,3,&found)==UG2_BIND_NO_MATCH);
-    assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,0,&found)==UG2_BIND_NO_MATCH);
+    /* Zero is now an explicit pre-arm wildcard, not a valid race finish.
+     * The actual first-place completion path always sends nai > 0. */
+    assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,0,&found)==UG2_BIND_MATCH);
+    assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,4,&found)==UG2_BIND_NO_MATCH);
     assert(ug2_career_resolve_circuit(c,3,4082,NULL,2,3,&found)==UG2_BIND_NO_MATCH);
     /* One game route may be shared by several races, with different payouts. */
     add(c,"S3_H_CIRCUIT_11",4081,3,2,3,3)->cash_value=1200;
