@@ -93,3 +93,75 @@ int career_source_decode_sponsor(const uint8_t *d, size_t len,
     *out=next;
     return 1;
 }
+
+/* Walk one extracted CareerManager block. GlobalLib's CareerInfo IDs and
+ * ReadGCareerRaces/ReadGCareerStages/ReadSponsors define child record sizes.
+ * The two-pass approach ensures a damaged trailing record cannot publish an
+ * earlier achievement or partially change the UI catalog. */
+typedef struct {
+    const uint8_t *data;
+    size_t length;
+} CareerPart;
+int career_source_iterate_main_block(const uint8_t *block, size_t length,
+                                     CareerSourceVisit visitor, void *ctx,
+                                     CareerSourceCounts *counts) {
+    if (!block || length<8 || length>(size_t)32*1024*1024 ||
+        le32(block)!=CAREER_SOURCE_BLOCK_MAIN ||
+        (size_t)le32(block+4)!=length-8) return 0;
+    CareerPart strings={0}, races={0}, stages={0}, sponsors={0};
+    for (size_t at=8;at<length;) {
+        if (length-at<8) return 0;
+        uint32_t id=le32(block+at);
+        size_t n=le32(block+at+4);
+        if (n>length-at-8) return 0;
+        CareerPart *part=NULL;
+        if (id==CAREER_SOURCE_BLOCK_STRINGS) part=&strings;
+        else if (id==CAREER_SOURCE_BLOCK_RACES) part=&races;
+        else if (id==CAREER_SOURCE_BLOCK_STAGES) part=&stages;
+        else if (id==CAREER_SOURCE_BLOCK_SPONSORS) part=&sponsors;
+        if (part) {
+            if (part->data) return 0; /* duplicate authoring block */
+            part->data=block+at+8;
+            part->length=n;
+        }
+        at+=8+n;
+    }
+    if (races.length%0x88u || stages.length%0x50u ||
+        sponsors.length%0x10u || ((races.length || sponsors.length) &&
+                                    !strings.data)) return 0;
+    size_t nr=races.length/0x88u, ns=stages.length/0x50u,
+           np=sponsors.length/0x10u;
+    /* Prevent caller accidentally allocating unbounded game-reported counts.
+     * Limits above retail expectancies but still small on 1 GiB H700. */
+    if (nr>2048 || ns>16 || np>128) return 0;
+    CareerSourceCounts found={(uint32_t)nr,(uint32_t)ns,(uint32_t)np};
+    for (int pass=0;pass<2;pass++) {
+        for (int kind=0;kind<3;kind++) {
+            const CareerPart *part=kind==0?&races:kind==1?&stages:&sponsors;
+            size_t size=kind==0?0x88u:kind==1?0x50u:0x10u;
+            for (size_t i=0;i<part->length/size;i++) {
+                CareerSourceEntry entry={0};
+                int ok=0;
+                if (kind==0) {
+                    entry.kind=CAREER_SOURCE_RACE;
+                    ok=career_source_decode_race(part->data+i*size,size,
+                                                  strings.data,strings.length,
+                                                  &entry.data.race);
+                } else if (kind==1) {
+                    entry.kind=CAREER_SOURCE_STAGE;
+                    ok=career_source_decode_stage(part->data+i*size,size,
+                                                   &entry.data.stage);
+                } else {
+                    entry.kind=CAREER_SOURCE_SPONSOR;
+                    ok=career_source_decode_sponsor(part->data+i*size,size,
+                                                     strings.data,strings.length,
+                                                     &entry.data.sponsor);
+                }
+                if (!ok) return 0;
+                if (pass==1 && visitor && !visitor(&entry,ctx)) return 0;
+            }
+        }
+    }
+    if (counts) *counts=found;
+    return 1;
+}
