@@ -41,6 +41,8 @@
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
+#include "career_event_map.h" /* verified PC GlobalB track/stage/payout link */
+#include "career_mods.h"      /* optional cash-only sidecar overlay */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2085,6 +2087,8 @@ int main(int argc, char **argv) {
     const char *circuit = "ROUTESL4RF/Paths4602.bin"; int explicit_circuit = 0;
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
+    const char *want_retail_race_id = NULL; /* disambiguates an original event */
+    const char *career_mods_path = NULL;  /* explicit, no automatic EA file edits */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2140,6 +2144,24 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-mods")) {
+            if(i+1>=argc || !argv[i+1][0] ||
+               (argv[i+1][0]=='-' && argv[i+1][1]=='-')) {
+                fprintf(stderr,"--career-mods requires an overlay file path\n");
+                return 2;
+            }
+            career_mods_path=argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-race")) {
+            if(i+1>=argc || !argv[i+1][0] ||
+               strlen(argv[i+1])>=CAREER_SOURCE_NAME ||
+               strspn(argv[i+1],"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")!=
+               strlen(argv[i+1])) {
+                fprintf(stderr,"--career-race requires a canonical retail race ID\n");
+                return 2;
+            }
+            want_retail_race_id=argv[++i];
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -2434,6 +2456,14 @@ int main(int argc, char **argv) {
             world2_heading_set = 1;
         }
         else dataroot = argv[i];
+    }
+    if(career_mods_path && !career_save_path) {
+        fprintf(stderr,"--career-mods also requires --career-save\n");
+        return 2;
+    }
+    if(want_retail_race_id && !career_save_path) {
+        fprintf(stderr,"--career-race also requires --career-save\n");
+        return 2;
     }
     if (chase_d > 0.0f) { g_dbg.chase_distance = chase_d; g_dbg.chase_height = chase_h; }
     /* Closed-circuit loading still uses the verified route/world path. Keep an
@@ -5896,6 +5926,7 @@ int main(int argc, char **argv) {
 #endif
     int racetimer = 0, finish_place = 0;
     Career career;
+    UG2CareerIndex *retail_catalog=NULL;
     career_init(&career);
     if (career_save_path) {
         int loaded = career_load(&career, career_save_path);
@@ -5905,6 +5936,47 @@ int main(int argc, char **argv) {
                career.stage, career.money, career.total_wins,
                career.world_wins, career.sponsor_wins,
                career.url_wins, career.dvd_covers);
+        /* Career state is independent from the game's original asset file.
+         * Only an existing local PC GLOBAL/GlobalB.lzc can supply rewards.
+         * Never hardcode a proprietary event catalog into the executable. */
+        char global_career_path[1024];
+        snprintf(global_career_path,sizeof global_career_path,
+                 "%s/GLOBAL/GlobalB.lzc",dataroot);
+        retail_catalog=(UG2CareerIndex *)malloc(sizeof *retail_catalog);
+        if(!retail_catalog ||
+           !ug2_career_load_file(global_career_path,retail_catalog)) {
+            fprintf(stderr,"career: original GlobalB.lzc unavailable or invalid; "
+                           "all retail payouts disabled\n");
+            free(retail_catalog);retail_catalog=NULL;
+        } else {
+            printf("career: validated original GlobalB.lzc: %u unique races, "
+                   "%u sections, %u sponsors\n",
+                   retail_catalog->unique_races,retail_catalog->career_sections,
+                   retail_catalog->sponsor_records);
+            if(career_mods_path) {
+                unsigned patches=0;
+                if(career_mods_apply_file(retail_catalog,career_mods_path,&patches))
+                    printf("career mods: %u verified reward overrides loaded\n",patches);
+                else fprintf(stderr,"career mods: invalid sidecar, ignored "
+                                    "(original payouts remain unchanged)\n");
+            }
+            if(world.city.race.active && world.city.race.ev>=0 &&
+               world.city.race.ev<world.city.nev) {
+                const WEvent *event=&world.city.ev[world.city.race.ev];
+                const CareerSourceRace *original=NULL;
+                CareerEventMatch state=career_event_resolve(retail_catalog,
+                    (uint16_t)event->id,career.stage,event->circuit?0u:1u,
+                    want_retail_race_id,&original);
+                if(state==CAREER_EVENT_MATCHED)
+                    printf("career map: route %d -> %s (stage %u, cash %u); "
+                           "scripted event rivals still unavailable\n",
+                           event->id,original->id,original->stage,original->cash_value);
+                else printf("career map: route %d stage %u: %s\n",event->id,
+                            career.stage,state==CAREER_EVENT_AMBIGUOUS?
+                            "ambiguous retail events (specify --career-race)":
+                            "no matching supported retail event");
+            }
+        }
     }
 #ifdef OPENUG2_MENU
     Fe frontend;
@@ -8028,27 +8100,53 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
-            /* Only a confirmed FIRST PLACE over actual circuit opponents may
-             * affect the career. Event-free roam and solo scripted-event
-             * gate completion are NOT valid career wins. Event IDs and retail
-             * payout tables are not verified yet. The prototype 500-unit award
-             * is deliberately limited to the existing completed AI circuit. */
+            /* Only confirmed first place over real AI rivals can earn money.
+             * Match the loaded circuit's Paths#### ID to the ORIGINAL PC
+             * GlobalB career record, then verify stage, behavior, opponent
+             * count, and unlock category. World checkpoint-only events do
+             * not have a genuine ranked opponent finish yet. */
             if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
                 selcirc>=0 && selcirc<ncirc && aipath.n>1) {
-                Career updated = career;
-                if (career_record_win(&updated, trackname, circlist[selcirc],
-                                      CAREER_WORLD, finish_place, nai, 500)) {
-                    int promoted = career_advance_stage(&updated);
-                    if (career_save(&updated,career_save_path)) {
-                        career = updated;
-                        printf("career verified circuit victory: %s stage=%u "
-                               "new-world-wins=%u cash=%u%s\n",
-                               circlist[selcirc], career.stage,
-                               career.world_wins, career.money,
-                               promoted ? " [STAGE UNLOCKED]" : "");
-                    } else fprintf(stderr,"career save failed: %s\n",
-                                   career_save_path);
-                } else printf("career replay: already counted, no duplicate cash\n");
+                uint16_t authored_track=0;
+                const CareerSourceRace *authored=NULL;
+                CareerEventMatch match=retail_catalog &&
+                    career_event_path_id(circlist[selcirc],&authored_track)
+                    ? career_event_resolve(retail_catalog,authored_track,
+                        career.stage,0u,want_retail_race_id,&authored)
+                    : CAREER_EVENT_MISSING;
+                if(match==CAREER_EVENT_MATCHED &&
+                   career_event_can_credit(authored,career.stage,nai)) {
+                    Career updated=career;
+                    /* Existing v1/v2 users may have been paid provisional
+                     * cash for this very same track: never double-award on
+                     * migration to original retail metadata identities. */
+                    if(career_has_win(&career,trackname,circlist[selcirc],
+                                      CAREER_WORLD)) {
+                        printf("career: legacy circuit already recorded; "
+                               "retail payout skipped (no duplicate credit)\n");
+                    } else if(career_record_win(&updated,"RETAIL",
+                                authored->id,CAREER_WORLD,finish_place,nai,
+                                authored->cash_value)) {
+                        /* Stage progression remains provisional. Do not let
+                         * it auto-promote a player on unverified counters. */
+                        if(career_save(&updated,career_save_path)) {
+                            career=updated;
+                            printf("career verified retail victory: %s route=%u "
+                                   "reward=%u stage=%u world-wins=%u cash=%u\n",
+                                   authored->id,authored_track,
+                                   authored->cash_value,career.stage,
+                                   career.world_wins,career.money);
+                        } else fprintf(stderr,"career save failed: %s\n",
+                                       career_save_path);
+                    } else printf("career replay: no duplicate retail cash\n");
+                } else printf("career: race %s (route=%u stage=%u) not eligible "
+                              "for retail reward (%s); no payout\n",
+                              circlist[selcirc],(unsigned)authored_track,
+                              career.stage,
+                              match==CAREER_EVENT_AMBIGUOUS?"ambiguous ID":
+                              match==CAREER_EVENT_MATCHED?
+                              "retail unlock/opponent requirements not met":
+                              "no original event match");
             }
         }
 
@@ -9738,6 +9836,23 @@ int main(int argc, char **argv) {
                 glUniform3f(uColor,0.65f,0.85f,0.50f);
                 draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
                           0.12f,0.012f,0.02f);
+                /* Display an original selected event only when exact and
+                 * unambiguous. Original stage/event tables come from the
+                 * user's installed game, not compiled-in proprietary data. */
+                if(retail_catalog && ncirc>0 && selcirc>=0 && selcirc<ncirc) {
+                    uint16_t route=0;
+                    const CareerSourceRace *active=NULL;
+                    if(career_event_path_id(circlist[selcirc],&route) &&
+                       career_event_resolve(retail_catalog,route,career.stage,
+                           0u,want_retail_race_id,&active)==CAREER_EVENT_MATCHED){
+                        char retlabel[144];
+                        snprintf(retlabel,sizeof retlabel,"NFSU2 %s  ROUTE %u  $%u",
+                                 active->id,(unsigned)route,active->cash_value);
+                        glUniform3f(uColor,0.76f,0.84f,1.0f);
+                        draw_text(&quad,uMVP,retlabel,
+                                  -text_width(retlabel,0.009f)/2,0.07f,0.009f,0.015f);
+                    }
+                }
             }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
@@ -10901,6 +11016,7 @@ int main(int argc, char **argv) {
     if(rain_vbo)glDeleteBuffers(1,&rain_vbo);
     free_headlight_shadows(&headlight_shadows);
     clear_car_vinyl();
+    free(retail_catalog);
     SDL_GL_DeleteContext(ctx); SDL_DestroyWindow(win); SDL_Quit();
     return final_status;
 }

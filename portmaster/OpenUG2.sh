@@ -6,6 +6,9 @@ TEXTURE_CACHE_MB="96"
 TRACK="STREAML4RA"
 CAR="HUMMER"
 TRAFFIC="0"
+# Optional data-only mods: never modify original game files.
+ENABLE_CAREER_MODS="${ENABLE_CAREER_MODS:-0}"   # set to 1 to load mods/career_rewards.ini
+CAREER_RACE_ID="${CAREER_RACE_ID:-}"            # exact retail ID for reused routes
 
 # PortMaster layout based on Detoy/OpenUG2 (R36S), plus H700 fallback paths.
 # Native SDL2 handles the controller; GPTOKEYB is not required.
@@ -110,6 +113,18 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
     exit 3
 fi
 
+CAREER_FLAGS=()
+if [ "$ENABLE_CAREER_MODS" = "1" ]; then
+    MOD_PATH="$GAMEDIR/mods/career_rewards.ini"
+    if [ ! -f "$MOD_PATH" ]; then
+        echo "Career modifications enabled but missing: $MOD_PATH"
+        exit 3
+    fi
+    CAREER_FLAGS+=(--career-mods "$MOD_PATH")
+fi
+if [ -n "$CAREER_RACE_ID" ]; then
+    CAREER_FLAGS+=(--career-race "$CAREER_RACE_ID")
+fi
 cd "$GAMEDIR" || exit 1
 # Run firmware-specific platform helper if provided by PortMaster.
 if declare -F pm_platform_helper >/dev/null 2>&1; then
@@ -121,6 +136,7 @@ fi
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
     --career-save "$GAMEDIR/saves/career.dat" \
+    "${CAREER_FLAGS[@]}" \
     --track "$TRACK" \
     --car "$CAR" \
     --traffic "$TRAFFIC" \
