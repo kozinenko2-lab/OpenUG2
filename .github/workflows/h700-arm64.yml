@@ -82,6 +82,7 @@ jobs:
           make career-source-test
           make ug2-career-file-test
           make ug2-career-binding-test
+          make ug2-career-credit-test
           make ug2-career-mod-test
           make ug2-career-dump
           make car-material-test

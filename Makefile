@@ -31,8 +31,8 @@ else
 endif
 
 # engine modules: orchestrator + Renderer/Physics/AI/Audio/Resources/World
-SRC  := src/main.c src/render.c src/physics.c src/ai.c src/audio.c src/resource.c src/world.c src/world_instance.c src/world_resident.c src/world_mesh.c src/hud.c src/career.c src/career_source_catalog.c src/ug2_career_file.c src/ug2_career_binding.c src/ug2_career_mod.c
-HDRS := src/traffic_heatmap.h src/asset_chunks.h src/car_config.h src/car_mod.h src/nfsu2.h src/render.h src/physics.h src/ai.h src/audio.h src/resource.h src/debug.h src/world.h src/world_instance.h src/world_resident.h src/world_mesh.h src/world_capture_policy.h src/world_group_reader.h src/world_scenery.h src/ground_motion.h src/hud.h src/career.h src/career_source_catalog.h src/ug2_career_file.h src/ug2_career_binding.h src/ug2_career_mod.h
+SRC  := src/main.c src/render.c src/physics.c src/ai.c src/audio.c src/resource.c src/world.c src/world_instance.c src/world_resident.c src/world_mesh.c src/hud.c src/career.c src/career_source_catalog.c src/ug2_career_file.c src/ug2_career_binding.c src/ug2_career_mod.c src/ug2_career_credit.c
+HDRS := src/traffic_heatmap.h src/asset_chunks.h src/car_config.h src/car_mod.h src/nfsu2.h src/render.h src/physics.h src/ai.h src/audio.h src/resource.h src/debug.h src/world.h src/world_instance.h src/world_resident.h src/world_mesh.h src/world_capture_policy.h src/world_group_reader.h src/world_scenery.h src/ground_motion.h src/hud.h src/career.h src/career_source_catalog.h src/ug2_career_file.h src/ug2_career_binding.h src/ug2_career_mod.h src/ug2_career_credit.h
 
 .DEFAULT_GOAL := nfsu2   # keep `make` building the binary, not the generated header
 
@@ -133,6 +133,12 @@ ug2-career-mod-test: tools/ug2_career_mod_test.c src/ug2_career_mod.c src/ug2_ca
 	$(CC) $(CFLAGS) -Isrc tools/ug2_career_mod_test.c src/ug2_career_mod.c -o build/ug2_career_mod_test
 	./build/ug2_career_mod_test
 .PHONY: ug2-career-mod-test
+
+ug2-career-credit-test: tools/ug2_career_credit_test.c src/ug2_career_credit.c src/ug2_career_binding.c src/career.c src/career.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Isrc tools/ug2_career_credit_test.c src/ug2_career_credit.c src/ug2_career_binding.c src/career.c -o build/ug2_career_credit_test
+	./build/ug2_career_credit_test
+.PHONY: ug2-career-credit-test
 
 ug2-career-binding-test: tools/ug2_career_binding_test.c src/ug2_career_binding.c src/ug2_career_binding.h src/ug2_career_file.h src/career_source_catalog.h
 	@mkdir -p build

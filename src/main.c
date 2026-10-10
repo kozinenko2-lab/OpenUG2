@@ -43,6 +43,7 @@
 #include "career.h"       /* persistent prototype career state */
 #include "ug2_career_file.h"
 #include "ug2_career_binding.h"
+#include "ug2_career_credit.h"
 #include "ug2_career_mod.h"
 #include "world_capture_policy.h"
 #include "world_scenery.h"
@@ -8141,33 +8142,26 @@ int main(int argc, char **argv) {
                 selcirc>=0 && selcirc<ncirc && aipath.n>1 && retail_career) {
                 const unsigned route=ug2_route_from_path(circlist[selcirc]);
                 const CareerSourceRace *retail_event=NULL;
-                const UG2BindResult match=ug2_career_resolve_circuit(
-                    retail_career,career.stage,route,career_race_id,
-                    (unsigned)LAP_TARGET,(unsigned)nai,&retail_event);
-                if(match==UG2_BIND_MATCH) {
-                    Career updated=career;
-                    /* Constant namespace prevents duplicate payouts if the
-                     * same retail race appears in two STREAM regions. */
-                    if(career_record_win(&updated,"UG2_ORIGINAL",
-                                         retail_event->id,CAREER_WORLD,
-                                         finish_place,nai,retail_event->cash_value)) {
-                        /* NO provisional stage auto-advance. Retail stage
-                         * gates require separate verified sponsor/URL checks. */
-                        if(career_save(&updated,career_save_path)) {
-                            career=updated;
-                            printf("career retail circuit victory: %s route=%u "
-                                   "prize=%u credits total=%u\n",
-                                   retail_event->id,route,
-                                   retail_event->cash_value,career.money);
-                        } else fprintf(stderr,"career save failed: %s\n",
-                                              career_save_path);
-                    } else printf("career replay: original event already credited\n");
+                const UG2CreditResult result=ug2_career_credit_circuit(
+                    &career,retail_career,route,career_race_id,
+                    (unsigned)LAP_TARGET,(unsigned)nai,
+                    finish_place,career_save_path,&retail_event);
+                if(result==UG2_CREDIT_PAID) {
+                    printf("career retail circuit victory: %s route=%u "
+                           "prize=%u credits total=%u\n",
+                           retail_event->id,route,retail_event->cash_value,
+                           career.money);
+                } else if(result==UG2_CREDIT_ALREADY_PAID) {
+                    printf("career replay: original event already credited\n");
+                } else if(result==UG2_CREDIT_SAVE_FAILED) {
+                    fprintf(stderr,"career save failed (no RAM mutation): %s\n",
+                            career_save_path);
                 } else {
                     printf("career no payout: route %u stage=%u laps=%d "
                            "AI=%d %s (use --career-race ORIGINAL_ID if "
                            "multiple career entries share the path)\n",
                            route,career.stage,LAP_TARGET,nai,
-                           match==UG2_BIND_AMBIGUOUS?"ambiguous":"unmatched");
+                           result==UG2_CREDIT_AMBIGUOUS?"ambiguous":"unmatched");
                 }
             }
         }
