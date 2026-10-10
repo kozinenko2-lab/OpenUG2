@@ -86,9 +86,47 @@ python3 tools/ug2_xbe_dday_ui_probe.py /path/to/your/default.xbe --json
 ```
 
 Probe validates exact SHA-256, both original resource labels and the uppercase
-message hashes, **10 direct CALLs**, **12 machine code signatures**, and
+message hashes, **17 direct CALLs**, **17 machine code signatures**, and
 the four outcomes of the 0/1 status/flag argument. Unknown revisions are
 rejected, no user files modified. CI regression runs without game assets.
+
+
+## Independent original A/B resume selector (additional confirmation)
+
+Two more **direct** Xbox paths choose which DDAY event becomes active.
+These are independent from the UI Accept_Button callback:
+
+1. At `0x00157AF0`, a 6-entry switch dispatches on global
+   `0x3FBDA0`. Its **sixth** case enters `0x00157B07`. That branch
+   looks up `DDAY_EVENT_A = 0xDD60E402` with `0x00111010`.
+   If the found 8-byte result record has `record+0x06 == 1`, the
+   code adds **1** to the hash (thus selecting `DDAY_EVENT_B =
+   0xDD60E403`); otherwise it selects A. It then calls
+   `0x00110880` and `0x0014D320` to activate the chosen event.
+   The verified six jump-table targets at `0x00157B68` are:
+   `157B02, 157B53, 157B67, 157B58, 157B67, 157B07`.
+2. At `0x000AFC33`, a different code path calls
+   `0x001117D0(DDAY_EVENT_A)`. That helper itself calls
+   `0x00111010` and returns whether `record+0x06 == 1`.
+   The code again selects `0xDD60E402 + result`, looks up the
+   corresponding race with `0x00111060`, then activates it
+   through `0x0014D320`.
+
+This gives a concrete Xbox **resumption/selection rule**:
+
+| Observed status of A record | Event selected for activation |
+| --- | --- |
+| absent or `!= 1` | `DDAY_EVENT_A` |
+| `== 1` | `DDAY_EVENT_B` |
+
+**Important:** here the selector checks *status 1*, whereas the
+UI confirmation deduplication logic earlier checks *status 5*.
+Their exact semantics and persistence are not established;
+neither may be mapped to our H700 career save flags until verified.
+
+The added validator now checks **17 direct CALLs**, **17 opcode
+landmarks**, and the six-entry selector jump-table. It still does not
+prove an original shop trigger location, a career win, or save write.
 
 ## Port decision
 
