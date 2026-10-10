@@ -6,6 +6,11 @@ TEXTURE_CACHE_MB="96"
 TRACK="STREAML4RA"
 CAR="HUMMER"
 TRAFFIC="0"
+# Leave blank to select only a UNIQUE matching original career event.
+# Set to an exact ID from your own GlobalB (e.g. STAGE_1_CIRCUIT_1).
+CAREER_RACE=""
+# Drop this optional plain-text file into ports/openug2/mods/ on the SD card.
+CAREER_BALANCE_FILE="mods/career_rewards.csv"
 
 # PortMaster layout based on Detoy/OpenUG2 (R36S), plus H700 fallback paths.
 # Native SDL2 handles the controller; GPTOKEYB is not required.
@@ -110,6 +115,14 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
     exit 3
 fi
 
+# External user-only payout mod, no Game GlobalB patch and no C#/.NET.
+EXTRA_CAREER_ARGS=()
+if [ -n "$CAREER_RACE" ]; then
+    EXTRA_CAREER_ARGS+=(--career-race "$CAREER_RACE")
+fi
+if [ -n "$CAREER_BALANCE_FILE" ] && [ -f "$GAMEDIR/$CAREER_BALANCE_FILE" ]; then
+    EXTRA_CAREER_ARGS+=(--career-balance "$GAMEDIR/$CAREER_BALANCE_FILE")
+fi
 cd "$GAMEDIR" || exit 1
 # Run firmware-specific platform helper if provided by PortMaster.
 if declare -F pm_platform_helper >/dev/null 2>&1; then
@@ -121,6 +134,7 @@ fi
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
     --career-save "$GAMEDIR/saves/career.dat" \
+    "${EXTRA_CAREER_ARGS[@]}" \
     --track "$TRACK" \
     --car "$CAR" \
     --traffic "$TRAFFIC" \
