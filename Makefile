@@ -122,6 +122,12 @@ career-test: tools/career_test.c src/career.c src/career.h
 	./build/career_test
 .PHONY: career-test
 
+career-garage-test: tools/career_garage_test.c src/career.c src/career.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Isrc tools/career_garage_test.c src/career.c -o build/career_garage_test
+	./build/career_garage_test
+.PHONY: career-garage-test
+
 world-resident-test: tools/world_resident_test.c src/world_resident.c src/world.c src/resource.c src/world_instance.c src/render.c src/physics.c $(HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -DWORLD_RESIDENT_TESTING -Isrc tools/world_resident_test.c src/world_resident.c src/world.c src/resource.c src/world_instance.c src/render.c src/physics.c -o build/world_resident_test $(SDL_LIBS) $(GL_LIBS) -lz -lm
