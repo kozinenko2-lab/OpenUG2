@@ -1,4 +1,4 @@
-/* Bridge retail GCareerRace metadata to OpenUG2's authored Routes*/Paths*.bin.
+/* Bridge retail GCareerRace metadata to OpenUG2's authored ROUTES.../PathsNNNN.bin.
  * The route ID alone is NOT a unique race identity (sponsors, repeat stages).
  * Only exact, unique, supported events are eligible for cash mutations. */
 #ifndef OPENUG2_CAREER_EVENT_MAP_H
