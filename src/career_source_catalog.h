@@ -47,6 +47,36 @@ typedef struct {
     uint8_t required_race_types[3]; /* raw enum; not yet decoded */
 } CareerSourceSponsor;
 
+/* CareerManager section inside an already located/extracted GlobalB archive.
+ * The outer block is 0x80034A10; children have 8-byte id+length headers.
+ * Visitors run only after preflight validation of all supported records.
+ * No game archive file is opened or decompressed by this API. */
+#define CAREER_SOURCE_BLOCK_MAIN    0x80034A10u
+#define CAREER_SOURCE_BLOCK_STRINGS 0x00034A1Du
+#define CAREER_SOURCE_BLOCK_RACES   0x00034A11u
+#define CAREER_SOURCE_BLOCK_STAGES  0x00034A18u
+#define CAREER_SOURCE_BLOCK_SPONSORS 0x00034A19u
+typedef enum {
+    CAREER_SOURCE_RACE=1, CAREER_SOURCE_STAGE=2, CAREER_SOURCE_SPONSOR=3
+} CareerSourceKind;
+typedef struct {
+    CareerSourceKind kind;
+    union {
+        CareerSourceRace race;
+        CareerSourceStage stage;
+        CareerSourceSponsor sponsor;
+    } data;
+} CareerSourceEntry;
+typedef struct {
+    uint32_t races;
+    uint32_t stages;
+    uint32_t sponsors;
+} CareerSourceCounts;
+typedef int (*CareerSourceVisit)(const CareerSourceEntry *entry, void *context);
+int career_source_iterate_main_block(const uint8_t *block, size_t length,
+                                     CareerSourceVisit visitor, void *context,
+                                     CareerSourceCounts *counts);
+
 /* Return 1 on a safe decode, 0 on malformed/truncated data.
  * On failure out is left unchanged. These are individual records,
  * not the complete GlobalB.lzc container! */
