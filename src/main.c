@@ -4196,6 +4196,57 @@ int main(int argc, char **argv) {
                n, dist, t1 - t0);
     }
 
+    /* Bind retail GCareerRace to the shipped event's PathsNNNN route.
+     * Route IDs are reused by other stages/sponsors: reject ambiguity. */
+    UG2CareerSelection career_selection={0};
+    int career_selection_ready=0;
+    if(career_race_id || career_save_path) {
+        char original_globalb[1024];
+        snprintf(original_globalb,sizeof original_globalb,
+                 "%s/GLOBAL/GlobalB.lzc",dataroot);
+        UG2CareerIndex *catalog=(UG2CareerIndex *)calloc(1,sizeof *catalog);
+        int catalog_ready=catalog && ug2_career_load_file(original_globalb,catalog);
+        Career profile_check;
+        career_init(&profile_check);
+        if(career_save_path) career_load(&profile_check,career_save_path);
+        if(catalog_ready) {
+            if(career_race_id) {
+                career_selection_ready=ug2_career_select(
+                    catalog,career_race_id,profile_check.stage,&career_selection);
+                if(!career_selection_ready ||
+                   (want_event_id && want_event_id!=(int)career_selection.route_id)) {
+                    fprintf(stderr,"career: unknown/locked/multi-stage original "
+                            "race '%s' or --event mismatch (stage %u)\n",
+                            career_race_id,profile_check.stage);
+                    free(catalog);
+                    return 2;
+                }
+                want_event_id=(int)career_selection.route_id;
+            } else if(want_event_id>0 && want_event_id<=UINT16_MAX) {
+                career_selection_ready=ug2_career_unique_route(catalog,
+                         profile_check.stage,(uint16_t)want_event_id,
+                         &career_selection);
+            }
+            if(career_selection_ready)
+                printf("career map bind: %s stage=%u route=Paths%u "
+                       "opponents=%u authentic-prize=%u\n",
+                       career_selection.race.id,profile_check.stage,
+                       (unsigned)career_selection.route_id,
+                       career_selection.race.opponents,
+                       career_selection.race.cash_value);
+            else if(want_event_id)
+                printf("career map: Paths%d has no unique eligible race for "
+                       "stage %u, payout disabled\n",want_event_id,profile_check.stage);
+        } else if(career_race_id) {
+            fprintf(stderr,"career: missing/invalid original GlobalB.lzc: %s\n",
+                    original_globalb);
+            free(catalog);
+            return 2;
+        } else fprintf(stderr,"career: no original GlobalB.lzc: retail payouts "
+                               "disabled, free driving still available\n");
+        free(catalog);
+    }
+
     /* Boot straight into a race event if asked (--event <id>). The Phase 71/72
        load-time A-star and checkpoint self-checks that used to run here were
        removed: they asserted on load and aborted for small events (e.g. 4301,
