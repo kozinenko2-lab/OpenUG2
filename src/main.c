@@ -43,6 +43,7 @@
 #include "career.h"       /* persistent prototype career state */
 #include "ug2_career_file.h"
 #include "career_event_bridge.h"
+#include "career_mods.h"
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2088,6 +2089,7 @@ int main(int argc, char **argv) {
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
     const char *career_race_id = NULL;   /* exact original GCareerRace ID */
+    const char *career_mod_path = NULL;  /* optional local authoring overlay */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2143,6 +2145,13 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-mod")) {
+            if(i+1>=argc || !argv[i+1][0]) {
+                fprintf(stderr,"--career-mod requires a local patch path\n");
+                return 2;
+            }
+            career_mod_path=argv[++i];
         }
         else if (!strcmp(argv[i], "--career-race")) {
             if(i+1>=argc || argv[i+1][0]=='-') {
@@ -4200,7 +4209,7 @@ int main(int argc, char **argv) {
      * Route IDs are reused by other stages/sponsors: reject ambiguity. */
     UG2CareerSelection career_selection={0};
     int career_selection_ready=0;
-    if(career_race_id || career_save_path) {
+    if(career_race_id || career_save_path || career_mod_path) {
         char original_globalb[1024];
         snprintf(original_globalb,sizeof original_globalb,
                  "%s/GLOBAL/GlobalB.lzc",dataroot);
@@ -4210,6 +4219,12 @@ int main(int argc, char **argv) {
         career_init(&profile_check);
         if(career_save_path) career_load(&profile_check,career_save_path);
         if(catalog_ready) {
+            if(career_mod_path && !ug2_career_mod_apply_file(catalog,career_mod_path)) {
+                fprintf(stderr,"career: invalid local mod %s (no changes applied)\n",
+                        career_mod_path);
+                free(catalog);
+                return 2;
+            }
             if(career_race_id) {
                 career_selection_ready=ug2_career_select(
                     catalog,career_race_id,profile_check.stage,&career_selection);
@@ -4229,15 +4244,16 @@ int main(int argc, char **argv) {
             }
             if(career_selection_ready)
                 printf("career map bind: %s stage=%u route=Paths%u "
-                       "opponents=%u authentic-prize=%u\n",
+                       "opponents=%u %s-prize=%u\n",
                        career_selection.race.id,profile_check.stage,
                        (unsigned)career_selection.route_id,
                        career_selection.race.opponents,
+                       career_mod_path ? "modded" : "original",
                        career_selection.race.cash_value);
             else if(want_event_id)
                 printf("career map: Paths%d has no unique eligible race for "
                        "stage %u, payout disabled\n",want_event_id,profile_check.stage);
-        } else if(career_race_id) {
+        } else if(career_race_id || career_mod_path) {
             fprintf(stderr,"career: missing/invalid original GlobalB.lzc: %s\n",
                     original_globalb);
             free(catalog);
