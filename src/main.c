@@ -5926,6 +5926,26 @@ int main(int argc, char **argv) {
         if(retail_catalog && ug2_career_load_file(globalfile,retail_catalog)){
             printf("retail career: %u original race IDs from %u sections\n",
                    retail_catalog->unique_races,retail_catalog->career_sections);
+            /* WEvent.id is the same authored PathsNNNN track ID as the
+             * original GCareerRace track_ids[]. Label only unique current
+             * stage matches, not generic guesses or free-roam fake prizes. */
+            int source_map_count=0;
+            for(int ev=0;ev<world.city.nev;ev++){
+                int event_id=world.city.ev[ev].id;
+                if(event_id<1 || event_id>65535)continue;
+                UG2CareerBinding mapentry;
+                if(ug2_career_map_lookup(retail_catalog,career_race_id,
+                    (uint16_t)event_id,career.stage,&mapentry)){
+                    printf("retail map event: Paths%d -> %s stage=%u "
+                           "prize=%u laps=%u [%s]\n",
+                           event_id,mapentry.race_id,career.stage,
+                           mapentry.payout,mapentry.laps,
+                           world.city.ev[ev].circuit?"circuit":"sprint");
+                    source_map_count++;
+                }
+            }
+            printf("retail map: %d uniquely matched events in loaded district\n",
+                   source_map_count);
         } else {
             fprintf(stderr,"career: original GlobalB.lzc missing or invalid; "
                            "credits DISABLED (no prototype payout).\n");
@@ -9790,6 +9810,27 @@ int main(int argc, char **argv) {
                 glUniform3f(uColor,0.65f,0.85f,0.50f);
                 draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
                           0.12f,0.012f,0.02f);
+                /* Preview source-authentic event metadata for the menu's
+                 * selected map route; this is NOT proof of win. Ambiguous
+                 * route IDs remain unlabeled until the player chooses a
+                 * specific original career race using --career-race. */
+                if(retail_catalog){
+                    int selected_id=ncirc>0 && selcirc>=0 && selcirc<ncirc
+                         ? ug2_career_route_id(circlist[selcirc])
+                         : nsprint>0 && selsprint>=0 && selsprint<nsprint
+                         ? world.city.ev[sprintev[selsprint]].id : -1;
+                    UG2CareerBinding preview;
+                    if(selected_id>0 && selected_id<=65535 &&
+                       ug2_career_map_lookup(retail_catalog,career_race_id,
+                           (uint16_t)selected_id,career.stage,&preview)){
+                        char label[160];
+                        snprintf(label,sizeof label,"%s / %u CREDITS",
+                                 preview.race_id,preview.payout);
+                        glUniform3f(uColor,0.95f,0.84f,0.25f);
+                        draw_text(&quad,uMVP,label,-text_width(label,0.011f)/2,
+                                  0.065f,0.011f,0.018f);
+                    }
+                }
             }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
