@@ -1,0 +1,15 @@
+OPENUG2_CAREER_MOD_V1
+# Copy this file to career_rewards.txt to enable it in OpenUG2.sh.
+# The original GLOBAL/GlobalB.lzc is never modified.
+#
+# For verified race names found with:
+#   make ug2-career-dump
+#   ./build/ug2_career_dump /your/game/GLOBAL/GlobalB.lzc
+#
+# Example of a retail career event (not currently linked to live race finishes):
+# S3_SPRINT_6=1000
+#
+# Example for today's playable 2-lap AI circuit reward (default 500):
+# @PROTOTYPE_CIRCUIT_CASH=750
+#
+# Never enable a retail ID payout without a validated race result mapping.

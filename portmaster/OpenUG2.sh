@@ -110,6 +110,12 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
     exit 3
 fi
 
+# A local overlay is optional: original game assets remain untouched.
+# To enable it, copy the example to mods/career_rewards.txt and edit rewards.
+MOD_ARGS=()
+if [ -f "$GAMEDIR/mods/career_rewards.txt" ]; then
+    MOD_ARGS=(--career-mod "$GAMEDIR/mods/career_rewards.txt")
+fi
 cd "$GAMEDIR" || exit 1
 # Run firmware-specific platform helper if provided by PortMaster.
 if declare -F pm_platform_helper >/dev/null 2>&1; then
@@ -121,6 +127,7 @@ fi
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
     --career-save "$GAMEDIR/saves/career.dat" \
+    "${MOD_ARGS[@]}" \
     --track "$TRACK" \
     --car "$CAR" \
     --traffic "$TRAFFIC" \
