@@ -62,6 +62,21 @@ int main(void) {
      * currently persist.  Do not fabricate a stage-start unlock. */
     assert(ug2_career_resolve_circuit(c,1,4013,NULL,0,0,&found)==UG2_BIND_NO_MATCH);
     assert(ug2_career_resolve_circuit(c,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    assert(ug2_career_bin_hash("DDAY_EVENT_B")==0xdd60e403u);
+    assert(ug2_career_bin_hash("")==0);
+    assert(ug2_career_bin_hash(NULL)==0);
+    /* Confirm the intro prerequisite is found by authoring hash, not guessed
+     * from the name/route prefix.  Merely finding it does NOT unlock it. */
+    CareerSourceRace *prologue=add(c,"DDAY_EVENT_B",4000,0,1,0,0);
+    assert(ug2_career_prerequisite(c,intro)==prologue);
+    assert(ug2_career_resolve_circuit(c,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    /* Unknown precursor hash and unsupported non-specific methods fail. */
+    intro->prerequisite_key=0x12345678u;
+    assert(ug2_career_prerequisite(c,intro)==NULL);
+    intro->prerequisite_key=0xdd60e403u;
+    intro->unlock_method=2;
+    assert(ug2_career_prerequisite(c,intro)==NULL);
+    intro->unlock_method=0;
     /* Lock gates from GlobalLib: requested retail ID must not unlock
      * sponsor, race-count or URL-gated races just because the route exists. */
     CareerSourceRace *locked=add(c,"S3_CIRCUIT_18",4091,3,2,3,3);
