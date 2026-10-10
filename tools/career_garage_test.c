@@ -39,6 +39,11 @@ static void test_garage_purchases(void) {
     Career c;career_init(&c);
     assert(!career_garage_active(&c));
     assert(!career_garage_purchase_car(&c,"FOCUS",2000));
+    /* A career migrated from v1 at stage 3 still needs one real starter. */
+    Career legacy; career_init(&legacy);
+    legacy.stage=3;
+    assert(career_garage_claim_starter(&legacy,"MIATA"));
+    assert(!career_garage_claim_starter(&legacy,"FOCUS"));
     assert(!career_garage_claim_starter(&c,"../FOCUS"));
     assert(!career_garage_claim_starter(&c,"focus"));
     assert(!career_garage_claim_starter(&c,""));
