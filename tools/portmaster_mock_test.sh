@@ -26,10 +26,10 @@ cat > "$root/ports/openug2/nfsu2.aarch64" <<'EOF'
 #!/usr/bin/env bash
 printf 'MOCK_BINARY\n'
 printf 'EXEC_PATH:%s\n' "$0"
-printf 'SDL_CONFIG:%s\n' "\${SDL_GAMECONTROLLERCONFIG:-}"
-printf 'CFW_MOD:%s\n' "\${MOCK_MOD_APPLIED:-}"
-printf 'XDG_HOME:%s\n' "\${XDG_DATA_HOME:-}"
-printf 'LD_PATH:%s\n' "\${LD_LIBRARY_PATH:-}"
+printf 'SDL_CONFIG:%s\n' "${SDL_GAMECONTROLLERCONFIG:-}"
+printf 'CFW_MOD:%s\n' "${MOCK_MOD_APPLIED:-}"
+printf 'XDG_HOME:%s\n' "${XDG_DATA_HOME:-}"
+printf 'LD_PATH:%s\n' "${LD_LIBRARY_PATH:-}"
 printf 'ARG:%s\n' "$@"
 EOF
 chmod +x "$root/ports/openug2/nfsu2.aarch64"
