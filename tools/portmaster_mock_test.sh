@@ -20,7 +20,7 @@ pm_finish() {
 }
 EOF
 cat > "$root/pm/mod_MockCFW.txt" <<'EOF'
-MOCK_MOD_APPLIED=yes
+export MOCK_MOD_APPLIED=yes
 EOF
 cat > "$root/ports/openug2/nfsu2.aarch64" <<'EOF'
 #!/usr/bin/env bash
