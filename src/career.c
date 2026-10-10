@@ -122,7 +122,10 @@ const CareerOwnedCar *career_garage_active(const Career *c) {
     return &c->garage[c->garage_selected];
 }
 int career_garage_claim_starter(Career *c, const char *model) {
-    if (!c || c->stage!=1 || c->garage_count || !garage_model_valid(model))
+    /* Also accepts upgraded v1 profiles from stages 2..5: old saves
+     * never stored a garage, so recovery must not strand the player. */
+    if (!c || c->stage<1 || c->stage>5 || c->garage_count ||
+        !garage_model_valid(model))
         return 0;
     /* Starter selection is explicit: caller must verify retail catalog. */
     memset(&c->garage[0],0,sizeof c->garage[0]);
