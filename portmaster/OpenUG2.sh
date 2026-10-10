@@ -7,30 +7,75 @@ TRACK="STREAML4RA"
 CAR="HUMMER"
 TRAFFIC="0"
 
+# PortMaster layout based on Detoy/OpenUG2 (R36S), plus H700 fallback paths.
+# Native SDL2 handles the controller; GPTOKEYB is not required.
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-GAMEDIR=""
-for candidate in \
-    /mnt/sdcard/ports/openug2 \
-    /mnt/mmc/ports/openug2 \
-    /mnt/SDCARD/ports/openug2 \
-    /mnt/sdcard/roms/ports/openug2 \
-    /mnt/mmc/roms/ports/openug2 \
-    "$SCRIPT_DIR/openug2" \
-    "$SCRIPT_DIR"; do
-    if [ -x "$candidate/nfsu2" ]; then GAMEDIR="$candidate"; break; fi
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONTROLFOLDER=""
+for candidate in "${PORTMASTER_CONTROL_DIR:-}" \
+    /opt/system/Tools/PortMaster \
+    /opt/tools/PortMaster \
+    "$XDG_DATA_HOME/PortMaster" \
+    /roms/ports/PortMaster \
+    /roms2/ports/PortMaster; do
+    if [ -n "$candidate" ] && [ -f "$candidate/control.txt" ]; then
+        CONTROLFOLDER="$candidate"
+        break
+    fi
 done
-if [ -z "$GAMEDIR" ]; then
-    echo "OpenUG2: ARM64 executable not found in ports/openug2." >&2
-    exit 1
-fi
-
-# Some PortMaster platforms have these files; direct shell launches do not.
-if [ -f /opt/system/Tools/PortMaster/control.txt ]; then
-    source /opt/system/Tools/PortMaster/control.txt
+if [ -n "$CONTROLFOLDER" ]; then
+    source "$CONTROLFOLDER/control.txt"
+    if [ -n "${CFW_NAME:-}" ] && [ -f "$CONTROLFOLDER/mod_$CFW_NAME.txt" ]; then
+        source "$CONTROLFOLDER/mod_$CFW_NAME.txt"
+    fi
     if declare -F get_controls >/dev/null 2>&1; then get_controls; fi
 fi
 if [ -f /opt/system/Tools/PortMaster/portmaster.sh ]; then
     source /opt/system/Tools/PortMaster/portmaster.sh
+fi
+PM_ROOT=""
+if [ -n "${directory:-}" ]; then
+    if [[ "$directory" == /* ]]; then PM_ROOT="$directory"
+    else PM_ROOT="/$directory"; fi
+fi
+DEVICE_ARCH="${DEVICE_ARCH:-}"
+GAMEDIR=""
+for candidate in \
+    "$SCRIPT_DIR/openug2" \
+    "$SCRIPT_DIR" \
+    "$PM_ROOT/ports/openug2" \
+    /roms/ports/openug2 \
+    /roms2/ports/openug2 \
+    /mnt/sdcard/ports/openug2 \
+    /mnt/mmc/ports/openug2 \
+    /mnt/SDCARD/ports/openug2 \
+    /mnt/sdcard/roms/ports/openug2 \
+    /mnt/mmc/roms/ports/openug2; do
+    [ -d "$candidate" ] || continue
+    if [ -x "$candidate/nfsu2" ] ||
+       { [ -n "$DEVICE_ARCH" ] && [ -x "$candidate/nfsu2.$DEVICE_ARCH" ]; }; then
+        GAMEDIR="$candidate"
+        break
+    fi
+done
+if [ -z "$GAMEDIR" ]; then
+    echo "OpenUG2: executable missing in ports/openug2" >&2
+    exit 1
+fi
+BIN="$GAMEDIR/nfsu2"
+if [ -n "$DEVICE_ARCH" ] && [ -x "$GAMEDIR/nfsu2.$DEVICE_ARCH" ]; then
+    BIN="$GAMEDIR/nfsu2.$DEVICE_ARCH"
+fi
+if [ -n "${sdl_controllerconfig:-}" ]; then
+    export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
+fi
+export XDG_DATA_HOME="$GAMEDIR/conf"
+mkdir -p "$XDG_DATA_HOME" || exit 1
+if [ -n "$DEVICE_ARCH" ] && [ -d "$GAMEDIR/libs.$DEVICE_ARCH" ]; then
+    export LD_LIBRARY_PATH="$GAMEDIR/libs.$DEVICE_ARCH:${LD_LIBRARY_PATH:-}"
+fi
+if [ -d "$GAMEDIR/libs" ]; then
+    export LD_LIBRARY_PATH="$GAMEDIR/libs:${LD_LIBRARY_PATH:-}"
 fi
 
 LOGDIR="$GAMEDIR/logs"
@@ -66,11 +111,12 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
 fi
 
 cd "$GAMEDIR" || exit 1
-if [ -d "$GAMEDIR/libs" ]; then
-    export LD_LIBRARY_PATH="$GAMEDIR/libs:$LD_LIBRARY_PATH"
+# Run firmware-specific platform helper if provided by PortMaster.
+if declare -F pm_platform_helper >/dev/null 2>&1; then
+    pm_platform_helper "$BIN"
 fi
-# Don't force SDL_VIDEODRIVER; allow the firmware to select the H700 backend.
-"$GAMEDIR/nfsu2" "$DATA" \
+# Don't force SDL_VIDEODRIVER; let firmware select its EGL/GLES2 backend.
+"$BIN" "$DATA" \
     --resolution "$RESOLUTION" \
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
