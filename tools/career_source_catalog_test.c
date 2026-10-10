@@ -81,8 +81,71 @@ static void sponsor_test(void) {
     p16(d+2,65535);
     assert(!career_source_decode_sponsor(d,sizeof d,names,sizeof names,&s));
 }
+typedef struct {int races,stages,sponsors;} Visits;
+static int visit(const CareerSourceEntry *e, void *ctx) {
+    Visits *v=ctx;
+    if(e->kind==CAREER_SOURCE_RACE) {
+        assert(!strcmp(e->data.race.id,"RACE"));
+        assert(e->data.race.cash_value==1234);
+        v->races++;
+    } else if(e->kind==CAREER_SOURCE_STAGE) {
+        assert(e->data.stage.id==2);
+        v->stages++;
+    } else if(e->kind==CAREER_SOURCE_SPONSOR) {
+        assert(!strcmp(e->data.sponsor.id,"SPONSOR"));
+        v->sponsors++;
+    } else assert(0);
+    return 1;
+}
+static size_t write_child(uint8_t *dst,uint32_t id,const uint8_t *data,size_t n){
+    p32(dst,id);p32(dst+4,(uint32_t)n);
+    if(n) memcpy(dst+8,data,n);
+    return n+8;
+}
+static void main_block_test(void) {
+    static const uint8_t labels[]="RACE\0TRIGGER\0SPONSOR\0";
+    uint8_t race[0x88]={0},stage[0x50]={0},sponsor[0x10]={0},none[4]={0};
+    p16(race,0);p16(race+6,(unsigned)sizeof("RACE"));
+    p32(race+0x30,1234);race[0x37]=2;
+    race[0x7c]=3;race[0x7e]=1;
+    stage[0]=2;stage[1]=1;
+    p16(sponsor,(unsigned)(sizeof("RACE")+sizeof("TRIGGER")));
+    p16(sponsor+2,100);
+    uint8_t block[1024]={0};
+    size_t at=8;
+    at+=write_child(block+at,CAREER_SOURCE_BLOCK_STRINGS,labels,sizeof labels);
+    at+=write_child(block+at,CAREER_SOURCE_BLOCK_RACES,race,sizeof race);
+    at+=write_child(block+at,CAREER_SOURCE_BLOCK_STAGES,stage,sizeof stage);
+    at+=write_child(block+at,CAREER_SOURCE_BLOCK_SPONSORS,sponsor,sizeof sponsor);
+    at+=write_child(block+at,0x44556677u,none,sizeof none); /* unknown skipped */
+    p32(block,CAREER_SOURCE_BLOCK_MAIN);
+    p32(block+4,(uint32_t)at-8);
+    CareerSourceCounts c={0};
+    Visits visits={0};
+    assert(career_source_iterate_main_block(block,at,visit,&visits,&c));
+    assert(c.races==1 && c.stages==1 && c.sponsors==1);
+    assert(visits.races==1 && visits.stages==1 && visits.sponsors==1);
+    /* One corrupt source record must fail before any callbacks. */
+    race[0x7e]=9;
+    size_t race_at=8+8+sizeof labels+8;
+    memcpy(block+race_at,race,sizeof race);
+    visits=(Visits){0};
+    assert(!career_source_iterate_main_block(block,at,visit,&visits,&c));
+    assert(!visits.races && !visits.stages && !visits.sponsors);
+    race[0x7e]=1;memcpy(block+race_at,race,sizeof race);
+    /* Broken child length, broken main size and truncated input all rejected. */
+    size_t length_at=8+8+sizeof labels+4;
+    p32(block+length_at,UINT32_MAX);
+    assert(!career_source_iterate_main_block(block,at,visit,&visits,&c));
+    p32(block+length_at,(uint32_t)sizeof race);
+    p32(block+4,(uint32_t)at); /* overdeclared main length */
+    assert(!career_source_iterate_main_block(block,at,visit,&visits,&c));
+    p32(block+4,(uint32_t)at-8);
+    assert(!career_source_iterate_main_block(block,at-1,visit,&visits,&c));
+    assert(career_source_iterate_main_block(block,at,NULL,NULL,&c));
+}
 int main(void) {
-    race_test();stage_test();sponsor_test();
+    race_test();stage_test();sponsor_test();main_block_test();
     puts("career_source_catalog_test: PASS");
     return 0;
 }
