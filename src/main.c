@@ -9815,6 +9815,23 @@ int main(int argc, char **argv) {
                 glUniform3f(uColor,0.65f,0.85f,0.50f);
                 draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
                           0.12f,0.012f,0.02f);
+                /* Display an original selected event only when exact and
+                 * unambiguous. Original stage/event tables come from the
+                 * user's installed game, not compiled-in proprietary data. */
+                if(retail_catalog && ncirc>0 && selcirc>=0 && selcirc<ncirc) {
+                    uint16_t route=0;
+                    const CareerSourceRace *active=NULL;
+                    if(career_event_path_id(circlist[selcirc],&route) &&
+                       career_event_resolve(retail_catalog,route,career.stage,
+                           0u,want_retail_race_id,&active)==CAREER_EVENT_MATCHED){
+                        char retlabel[144];
+                        snprintf(retlabel,sizeof retlabel,"NFSU2 %s  ROUTE %u  $%u",
+                                 active->id,(unsigned)route,active->cash_value);
+                        glUniform3f(uColor,0.76f,0.84f,1.0f);
+                        draw_text(&quad,uMVP,retlabel,
+                                  -text_width(retlabel,0.009f)/2,0.07f,0.009f,0.015f);
+                    }
+                }
             }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
@@ -10978,6 +10995,7 @@ int main(int argc, char **argv) {
     if(rain_vbo)glDeleteBuffers(1,&rain_vbo);
     free_headlight_shadows(&headlight_shadows);
     clear_car_vinyl();
+    free(retail_catalog);
     SDL_GL_DeleteContext(ctx); SDL_DestroyWindow(win); SDL_Quit();
     return final_status;
 }
