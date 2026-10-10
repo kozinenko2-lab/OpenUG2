@@ -10,7 +10,34 @@ import json
 import struct
 from pathlib import Path
 
-from ug2_xbe_dday_flow_probe import EXPECTED_SHA256, xbe_load
+from ug2_xbe_dday_flow_probe import KNOWN_SHA256 as EXPECTED_SHA256
+
+def xbe_load(path: Path):
+    """Map raw XBE sections to game virtual addresses, read-only."""
+    if not path.is_file() or path.stat().st_size > 64 * 1024 * 1024:
+        raise ValueError("missing or oversized Xbox XBE")
+    data = path.read_bytes()
+    if len(data) < 0x180 or data[:4] != b"XBEH":
+        raise ValueError("invalid XBEH header")
+    def read32(off):
+        return struct.unpack_from("<I", data, off)[0]
+    base = read32(0x104)
+    n = read32(0x11C)
+    table = read32(0x120) - base
+    if not 1 <= n <= 256 or table < 0 or table + 0x38*n > len(data):
+        raise ValueError("invalid section directory")
+    sections = []
+    for i in range(n):
+        va, _, raw, size, _ = struct.unpack_from("<5I", data, table + 0x38*i + 4)
+        if raw > len(data) or size > len(data) - raw:
+            raise ValueError("invalid section bounds")
+        sections.append((va, raw, size))
+    def at(va, length):
+        for first, raw, size in sections:
+            if first <= va and length <= size and va - first <= size - length:
+                return data[raw + va - first:raw + va - first + length]
+        raise ValueError("unmapped game address: 0x%08X" % va)
+    return data, at
 
 # Source machine code in this revision contains the mixed-case labels in .rdata,
 # whereas the corresponding UI message IDs use their uppercase hashes.
