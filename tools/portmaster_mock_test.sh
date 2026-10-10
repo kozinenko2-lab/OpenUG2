@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Asset-free smoke test: simulate R36S/MuOS PortMaster with an ARM64 mock binary.
-set -euo pipefail
+set -euxo pipefail
 root="$(mktemp -d)"
 trap 'rm -rf "$root"' EXIT
 mkdir -p "$root/ports/openug2/game/TRACKS" "$root/ports/openug2/game/CARS" \
