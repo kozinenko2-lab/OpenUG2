@@ -8,6 +8,19 @@
 
 #define CAREER_MAX_EVENTS 256
 #define CAREER_MAX_STAGE 5
+#define CAREER_MAX_GARAGE 8
+#define CAREER_CAR_MODEL_CAP 32
+#define CAREER_UPGRADE_SLOTS 8
+/* Stable upgrade slot identities; exact tier/price catalog is still TODO. */
+typedef enum {
+    CAREER_UPG_ENGINE, CAREER_UPG_ECU, CAREER_UPG_TRANSMISSION,
+    CAREER_UPG_TURBO, CAREER_UPG_NITROUS, CAREER_UPG_SUSPENSION,
+    CAREER_UPG_BRAKES, CAREER_UPG_TIRES
+} CareerUpgradeSlot;
+typedef struct {
+    char model[CAREER_CAR_MODEL_CAP];  /* validated game CARS directory ID */
+    uint8_t tier[CAREER_UPGRADE_SLOTS]; /* zero=stock; 1..3 purchased */
+} CareerOwnedCar;
 typedef enum {
     CAREER_WORLD = 0, CAREER_SPONSOR = 1, CAREER_URL = 2
 } CareerEventKind;
@@ -22,6 +35,9 @@ typedef struct {
     uint32_t total_wins;        /* unique completed race identities */
     uint32_t seen_count;        /* race + photo identities in wins[] */
     CareerWin wins[CAREER_MAX_EVENTS];
+    uint32_t garage_count;
+    uint32_t garage_selected;
+    CareerOwnedCar garage[CAREER_MAX_GARAGE];
 } Career;
 typedef struct {
     uint32_t world_wins, sponsor_wins, url_wins, dvd_covers, stars;
@@ -42,7 +58,23 @@ int career_record_cover(Career *c, const char *location, unsigned stars);
 int career_has_win(const Career *c, const char *track, const char *event,
                    CareerEventKind kind);
 
-/* Portable LE v1 with checksum and bounded event list.
+/* Garage inventory shares the career save: purchases never change cash
+ * without changing ownership in the same transaction. All game-facing
+ * callers must save a copy before publishing the change in RAM.
+ * Starter must be chosen by the game/menu, not silently set to Hummer. */
+int career_garage_claim_starter(Career *c, const char *model);
+int career_garage_purchase_car(Career *c, const char *model, uint32_t price);
+int career_garage_select(Career *c, uint32_t index);
+int career_garage_purchase_upgrade(Career *c, CareerUpgradeSlot slot,
+                                   uint8_t tier, uint32_t price);
+int career_garage_owns(const Career *c, const char *model);
+const CareerOwnedCar *career_garage_active(const Career *c);
+
+/* Portable LE v2 with checksum and bounded event/garage lists.
+ * Reads v1 profiles with empty garage and migrates on next save.
+ * Note: v1 never stored owned car names, so player must pick a starter.
+ *
+ *
  * Writes .tmp + fsync + rename; retains a valid previous copy in .bak.
  * Reads backup if primary is unreadable/corrupt. The caller provides a file
  * path within the game folder; no retail save formats are involved. */

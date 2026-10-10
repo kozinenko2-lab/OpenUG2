@@ -8,9 +8,12 @@
 #include <unistd.h>
 #include <stdint.h>
 
-#define CAREER_VERSION 1u
-#define CAREER_HEADER 52u
-#define CAREER_MAX_FILE (CAREER_HEADER + CAREER_MAX_EVENTS * 8u + 4u)
+#define CAREER_VERSION 2u
+#define CAREER_V1_HEADER 52u
+#define CAREER_V2_PREFIX 56u
+#define CAREER_V2_CAR_BYTES (CAREER_CAR_MODEL_CAP + CAREER_UPGRADE_SLOTS)
+#define CAREER_MAX_FILE (CAREER_V2_PREFIX + CAREER_MAX_EVENTS * 8u + \
+                         CAREER_MAX_GARAGE * CAREER_V2_CAR_BYTES + 4u)
 static const unsigned char career_magic[8] = {'O','U','G','2','C','R','0','1'};
 
 void career_init(Career *c) {
@@ -94,6 +97,73 @@ int career_record_cover(Career *c, const char *location, unsigned stars) {
     if (stars > c->visual_rating) c->visual_rating = stars;
     return 1;
 }
+static int garage_model_valid(const char *model) {
+    if (!model || !*model) return 0;
+    size_t i;
+    for (i=0; i<CAREER_CAR_MODEL_CAP; i++) {
+        unsigned char c=(unsigned char)model[i];
+        if (!c) return i>0;
+        /* Reject paths, traversal, trailing spaces and noncanonical names. */
+        if (!((c>='A' && c<='Z') || (c>='0' && c<='9') ||
+              c=='_' || c=='-')) return 0;
+    }
+    return 0; /* no terminating NUL */
+}
+int career_garage_owns(const Career *c, const char *model) {
+    if (!c || !garage_model_valid(model) || c->garage_count>CAREER_MAX_GARAGE)
+        return 0;
+    for (uint32_t i=0;i<c->garage_count;i++)
+        if (strcmp(c->garage[i].model,model)==0) return 1;
+    return 0;
+}
+const CareerOwnedCar *career_garage_active(const Career *c) {
+    if (!c || !c->garage_count || c->garage_count>CAREER_MAX_GARAGE ||
+        c->garage_selected>=c->garage_count) return NULL;
+    return &c->garage[c->garage_selected];
+}
+int career_garage_claim_starter(Career *c, const char *model) {
+    /* Also accepts upgraded v1 profiles from stages 2..5: old saves
+     * never stored a garage, so recovery must not strand the player. */
+    if (!c || c->stage<1 || c->stage>5 || c->garage_count ||
+        !garage_model_valid(model))
+        return 0;
+    /* Starter selection is explicit: caller must verify retail catalog. */
+    memset(&c->garage[0],0,sizeof c->garage[0]);
+    strcpy(c->garage[0].model,model);
+    c->garage_count=1;
+    c->garage_selected=0;
+    return 1;
+}
+int career_garage_purchase_car(Career *c, const char *model,
+                               uint32_t price) {
+    if (!c || !garage_model_valid(model) || price==0 || c->money<price ||
+        !c->garage_count || c->garage_count>=CAREER_MAX_GARAGE ||
+        career_garage_owns(c,model)) return 0;
+    /* A shop must separately verify model availability and unlocks. */
+    CareerOwnedCar *car=&c->garage[c->garage_count];
+    memset(car,0,sizeof *car);
+    strcpy(car->model,model);
+    c->garage_count++;
+    c->money-=price;
+    return 1;
+}
+int career_garage_select(Career *c, uint32_t index) {
+    if (!c || index>=c->garage_count || c->garage_count>CAREER_MAX_GARAGE)
+        return 0;
+    c->garage_selected=index;
+    return 1;
+}
+int career_garage_purchase_upgrade(Career *c, CareerUpgradeSlot slot,
+                                   uint8_t tier, uint32_t price) {
+    if (!c || slot<CAREER_UPG_ENGINE || slot>CAREER_UPG_TIRES ||
+        tier<1 || tier>3 || price==0 || c->money<price) return 0;
+    CareerOwnedCar *car=(CareerOwnedCar *)career_garage_active(c);
+    if (!car || tier<=car->tier[slot]) return 0;
+    /* Purchase and cash mutation form one logical profile update. */
+    car->tier[slot]=tier;
+    c->money-=price;
+    return 1;
+}
 static void put32(unsigned char *p, uint32_t x) {
     for (int i=0;i<4;i++) p[i]=(unsigned char)(x>>(i*8));
 }
@@ -119,8 +189,19 @@ static int valid(const Career *c) {
     if (!c || c->stage<1 || c->stage>5 || c->seen_count>CAREER_MAX_EVENTS ||
         c->total_wins>c->seen_count || c->visual_rating>10 ||
         c->world_wins>c->total_wins || c->sponsor_wins>c->total_wins ||
-        c->url_wins>c->total_wins || c->dvd_covers>c->seen_count)
+        c->url_wins>c->total_wins || c->dvd_covers>c->seen_count ||
+        c->garage_count>CAREER_MAX_GARAGE ||
+        (c->garage_count && c->garage_selected>=c->garage_count) ||
+        (!c->garage_count && c->garage_selected!=0))
         return 0;
+    for (uint32_t i=0;i<c->garage_count;i++) {
+        const CareerOwnedCar *car=&c->garage[i];
+        if (!garage_model_valid(car->model)) return 0;
+        for (unsigned j=0;j<CAREER_UPGRADE_SLOTS;j++)
+            if (car->tier[j]>3) return 0;
+        for (uint32_t j=0;j<i;j++)
+            if (!strcmp(c->garage[j].model,car->model)) return 0;
+    }
     for (uint32_t i=0;i<c->seen_count;i++) {
         if (!c->wins[i].key) return 0;
         for(uint32_t j=0;j<i;j++) if(c->wins[i].key==c->wins[j].key) return 0;
@@ -130,23 +211,46 @@ static int valid(const Career *c) {
 static size_t encode(const Career *c, unsigned char *buffer) {
     if (!valid(c)) return 0;
     memcpy(buffer,career_magic,8);
-    const uint32_t values[10] = {
+    const uint32_t values[12] = {
         CAREER_VERSION,c->stage,c->money,c->world_wins,c->sponsor_wins,
-        c->url_wins,c->dvd_covers,c->visual_rating,c->total_wins,c->seen_count
+        c->url_wins,c->dvd_covers,c->visual_rating,c->total_wins,c->seen_count,
+        c->garage_count,c->garage_selected
     };
-    for (int i=0;i<10;i++) put32(buffer+8+i*4,values[i]);
-    for (uint32_t i=0;i<c->seen_count;i++)
-        put64(buffer+48+i*8,c->wins[i].key);
-    size_t n = 48+(size_t)c->seen_count*8;
-    put32(buffer+n,checksum(buffer,n));
-    return n+4;
+    for (int i=0;i<12;i++) put32(buffer+8+i*4,values[i]);
+    size_t offset=CAREER_V2_PREFIX;
+    for (uint32_t i=0;i<c->seen_count;i++,offset+=8)
+        put64(buffer+offset,c->wins[i].key);
+    for (uint32_t i=0;i<c->garage_count;i++) {
+        /* Fixed-length ASCII model + eight owned package tiers.
+         * Noncanonical string tails remain zeroed. */
+        memset(buffer+offset,0,CAREER_V2_CAR_BYTES);
+        size_t length=strlen(c->garage[i].model);
+        memcpy(buffer+offset,c->garage[i].model,length);
+        memcpy(buffer+offset+CAREER_CAR_MODEL_CAP,
+               c->garage[i].tier,CAREER_UPGRADE_SLOTS);
+        offset+=CAREER_V2_CAR_BYTES;
+    }
+    put32(buffer+offset,checksum(buffer,offset));
+    return offset+4;
 }
 static int decode(Career *out, const unsigned char *bytes, size_t n) {
-    if (n<CAREER_HEADER || n>CAREER_MAX_FILE ||
-        memcmp(bytes,career_magic,8) || get32(bytes+8)!=CAREER_VERSION)
-        return 0;
+    if (n<CAREER_V1_HEADER || n>CAREER_MAX_FILE ||
+        memcmp(bytes,career_magic,8)) return 0;
+    uint32_t version=get32(bytes+8);
+    if (version!=1u && version!=CAREER_VERSION) return 0;
     uint32_t count=get32(bytes+44);
-    if (count>CAREER_MAX_EVENTS || n!=(size_t)CAREER_HEADER+count*8 ||
+    if (count>CAREER_MAX_EVENTS) return 0;
+    uint32_t garage_count=0,garage_selected=0;
+    size_t offset=48;
+    if (version==CAREER_VERSION) {
+        if (n<CAREER_V2_PREFIX+4) return 0;
+        garage_count=get32(bytes+48);
+        garage_selected=get32(bytes+52);
+        offset=CAREER_V2_PREFIX;
+    }
+    if (garage_count>CAREER_MAX_GARAGE ||
+        n!=offset+(size_t)count*8+
+           (size_t)garage_count*CAREER_V2_CAR_BYTES+4 ||
         get32(bytes+n-4)!=checksum(bytes,n-4)) return 0;
     Career next; career_init(&next);
     next.stage=get32(bytes+12); next.money=get32(bytes+16);
@@ -154,7 +258,16 @@ static int decode(Career *out, const unsigned char *bytes, size_t n) {
     next.url_wins=get32(bytes+28); next.dvd_covers=get32(bytes+32);
     next.visual_rating=get32(bytes+36);
     next.total_wins=get32(bytes+40); next.seen_count=count;
-    for (uint32_t i=0;i<count;i++) next.wins[i].key=get64(bytes+48+i*8);
+    for (uint32_t i=0;i<count;i++,offset+=8)
+        next.wins[i].key=get64(bytes+offset);
+    next.garage_count=garage_count;
+    next.garage_selected=garage_selected;
+    for (uint32_t i=0;i<garage_count;i++) {
+        CareerOwnedCar *car=&next.garage[i];
+        memcpy(car->model,bytes+offset,CAREER_CAR_MODEL_CAP);
+        memcpy(car->tier,bytes+offset+CAREER_CAR_MODEL_CAP,CAREER_UPGRADE_SLOTS);
+        offset+=CAREER_V2_CAR_BYTES;
+    }
     if (!valid(&next)) return 0;
     *out=next;
     return 1;

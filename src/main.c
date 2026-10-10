@@ -6288,11 +6288,13 @@ int main(int argc, char **argv) {
                         printf("freeroam: whole %s bundle driveable from (%.3f %.3f %.3f)\n",
                                trackname, carpos[0], carpos[1], carpos[2]);
                     } else if ((k==SDLK_LEFT || k==SDLK_RIGHT) && ncars > 1) {
-                        selcar = (selcar + (k==SDLK_RIGHT?1:ncars-1)) % ncars;
-                        pending_car = selcar;
+                        /* Queue the requested index; do not update selcar
+                         * before the transactional resource load succeeds. */
+                        pending_car = (selcar + (k==SDLK_RIGHT?1:ncars-1)) % ncars;
                     } else if ((k==SDLK_UP || k==SDLK_DOWN) && ntrack > 1) {
-                        seltrack = (seltrack + (k==SDLK_DOWN?1:ntrack-1)) % ntrack;
-                        pending_track = seltrack;
+                        /* The current district remains selected until the
+                         * prepared world and event catalog both validate. */
+                        pending_track = (seltrack + (k==SDLK_DOWN?1:ntrack-1)) % ntrack;
                     } else if ((k==SDLK_LEFTBRACKET || k==SDLK_RIGHTBRACKET) &&
                                !ncirc && nsprint > 1) {
                         selsprint = (selsprint + (k==SDLK_RIGHTBRACKET?1:nsprint-1)) % nsprint;
