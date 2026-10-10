@@ -2093,6 +2093,7 @@ int main(int argc, char **argv) {
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
+    int laps_explicit=0;
     float world_radius = 1400.0f; /* overridable via --world-radius */
     unsigned int texture_cache_mb = 0; /* 0 keeps desktop's unbounded cache */
     for (int i = 1; i < argc; i++) {
@@ -2163,7 +2164,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--frames")  && i+1 < argc) { shotframes = atoi(argv[++i]); shotframes_set = 1; }
-        else if (!strcmp(argv[i], "--laps")    && i+1 < argc) want_laps = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--laps")    && i+1 < argc) {
+            want_laps = atoi(argv[++i]);
+            laps_explicit=1;
+        }
         else if (!strcmp(argv[i], "--track")   && i+1 < argc) trackname = argv[++i];
         else if (!strcmp(argv[i], "--circuit") && i+1 < argc) { circuit = argv[++i]; explicit_circuit = 1; }
         else if (!strcmp(argv[i], "--objdump") && i+1 < argc) objdump = argv[++i];
@@ -4242,6 +4246,8 @@ int main(int argc, char **argv) {
                          profile_check.stage,(uint16_t)want_event_id,
                          &career_selection);
             }
+            if(career_selection_ready && career_selection.race.laps[0]>0 && !laps_explicit)
+                want_laps=career_selection.race.laps[0];
             if(career_selection_ready)
                 printf("career map bind: %s stage=%u route=Paths%u "
                        "opponents=%u %s-prize=%u\n",
@@ -5965,7 +5971,9 @@ int main(int argc, char **argv) {
     /* race flow: 0 = countdown, 1 = driving, 2 = finished.  The temporary
        synthetic frontend is opt-in (`make menu`); normal builds boot directly
        into the authored free-roam pose until the real menu asset work is ready. */
-    const int COUNTDOWN = 180, LAP_TARGET = 2;
+    const int COUNTDOWN = 180;
+    const int LAP_TARGET = career_selection_ready && career_selection.race.laps[0]>0 ?
+        career_selection.race.laps[0] : 2;
 #ifdef OPENUG2_MENU
     int race_state = (shot || resident_route_audit || resident_drive_audit) ? 1 : 3;
 #else
@@ -8113,6 +8121,7 @@ int main(int argc, char **argv) {
                selcirc>=0 && selcirc<ncirc && aipath.n>1) {
                 int matched_world=(world.city.race.active &&
                      world.city.race.finished &&
+                     world.city.race.maxlaps==(int)career_selection.race.laps[0] &&
                      world.city.race.ev>=0 &&
                      world.city.race.ev<world.city.nev &&
                      world.city.ev[world.city.race.ev].id==
