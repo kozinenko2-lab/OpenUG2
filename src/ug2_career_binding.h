@@ -19,6 +19,8 @@ unsigned ug2_career_map_count(const UG2CareerIndex *cat,
 /* Resolve only original single-route WORLD/CIRCUIT events presently supported
  * by circuit AI. Exact stage, original lap count, opponents and route must
  * match. A supplied race_id chooses among authored stage/route collisions.
+ * For pre-race discovery ONLY, passing laps=0 and/or opponents=0 ignores
+ * that dimension; the finish/payout path must pass confirmed positive values.
  * No side effects; the returned pointer belongs to the catalog. */
 UG2BindResult ug2_career_resolve_circuit(
     const UG2CareerIndex *cat, unsigned stage, unsigned route,
