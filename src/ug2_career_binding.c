@@ -32,10 +32,28 @@ unsigned ug2_career_map_count(const UG2CareerIndex *cat,
     }
     return count;
 }
+/* GlobalLib eUnlockCondition values:
+ * 0 SPECIFIC_RACE_WON    (hashed prerequisite needs a verified dependency)
+ * 1 AT_STAGE_START      (the +0x10 byte names the previous stage)
+ * 2 SPONSOR_CHOSEN
+ * 3 REQUIRED_RACES_WON
+ * 4 REQUIRED_URL_WON
+ * Do not treat a selectable Paths route or --career-race as proof of unlock.
+ * This stage-start rule is limited to the byte pattern verified in the
+ * original PC UG2 GlobalB.lzc; unsupported conditions fail closed. */
+static int original_circuit_stage_start(const CareerSourceRace *r,
+                                         unsigned stage) {
+    return r && stage>=2 && stage<=5 &&
+           r->unlock_method==1 &&
+           r->required_specific_url==stage-1 &&
+           r->sponsor_gate==0 &&
+           r->required_races==0 && r->required_urls==0;
+}
 static int original_circuit_supported(const CareerSourceRace *r,
                                        unsigned stage,unsigned route,
                                        unsigned laps,unsigned opponents) {
-    if(!r || r->stage!=stage || r->icon_type!=3 ||
+    if(!r || !original_circuit_stage_start(r,stage) ||
+       r->stage!=stage || r->icon_type!=3 ||
        r->behavior!=0 || r->is_hidden!=0 ||
        r->num_stages!=1 || r->track_ids[0]!=route ||
        (laps && r->laps[0]!=laps) ||
@@ -46,6 +64,8 @@ static int original_circuit_supported(const CareerSourceRace *r,
     /* Accept only plain, non-hidden regular circuits with a canonical
      * retail identifier. Hidden events, sponsors, SUV and other types
      * require separate unlock checks and dedicated gameplay systems.
+     * This resolver intentionally rejects SPECIFIC_RACE_WON (including the
+     * stage-1 intro circuit) until prerequisite hash tracking exists.
      * Passing --career-race NEVER bypasses those gates. */
     char prefix[32];
     int n=stage==1?snprintf(prefix,sizeof prefix,"STAGE_1_CIRCUIT_")
