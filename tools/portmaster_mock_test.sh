@@ -49,6 +49,12 @@ grep -Fq "EXEC_PATH:$root/ports/openug2/nfsu2.aarch64" "$log"
 test -d "$root/ports/openug2/saves"
 test -d "$root/ports/openug2/conf"
 grep -Fq "libs.aarch64" "$log"
+# Optional mods must pass through the same launcher without a second script.
+mkdir -p "$root/ports/openug2/mods"
+printf '# empty local overlay\n' > "$root/ports/openug2/mods/career.cfg"
+PORTMASTER_CONTROL_DIR="$root/pm" bash "$root/ports/OpenUG2.sh"
+grep -Fq 'ARG:--career-mod' "$log"
+grep -Fq "ARG:$root/ports/openug2/mods/career.cfg" "$log"
 # Missing assets must reject launch without running the game.
 rm -r "$root/ports/openug2/game/CARS"
 set +e
