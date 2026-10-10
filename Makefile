@@ -140,9 +140,9 @@ ug2-career-credit-test: tools/ug2_career_credit_test.c src/ug2_career_credit.c s
 	./build/ug2_career_credit_test
 .PHONY: ug2-career-credit-test
 
-ug2-career-binding-test: tools/ug2_career_binding_test.c src/ug2_career_binding.c src/ug2_career_binding.h src/ug2_career_file.h src/career_source_catalog.h
+ug2-career-binding-test: tools/ug2_career_binding_test.c src/ug2_career_binding.c src/ug2_career_binding.h src/ug2_career_file.h src/career_source_catalog.h src/career.c src/career.h
 	@mkdir -p build
-	$(CC) $(CFLAGS) -Isrc tools/ug2_career_binding_test.c src/ug2_career_binding.c -o build/ug2_career_binding_test
+	$(CC) $(CFLAGS) -Isrc tools/ug2_career_binding_test.c src/ug2_career_binding.c src/career.c -o build/ug2_career_binding_test
 	./build/ug2_career_binding_test
 .PHONY: ug2-career-binding-test
 

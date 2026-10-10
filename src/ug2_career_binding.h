@@ -35,4 +35,15 @@ UG2BindResult ug2_career_resolve_circuit(
     const UG2CareerIndex *cat, unsigned stage, unsigned route,
     const char *race_id, unsigned laps, unsigned opponents,
     const CareerSourceRace **found);
+
+/* Production selection and payout must use the same profile-aware resolver.
+ * SPECIFIC_RACE_WON needs a unique predecessor ID from the original catalog
+ * AND its completed win saved under UG2_ORIGINAL/CAREER_WORLD.
+ * NULL profile never satisfies such a gate. An explicit requested race
+ * ID does not bypass a missing prerequisite. Stage-start circuits keep
+ * their original strict stage/byte checks. */
+UG2BindResult ug2_career_resolve_circuit_for_profile(
+    const UG2CareerIndex *cat, const Career *profile,
+    unsigned stage, unsigned route, const char *race_id,
+    unsigned laps, unsigned opponents, const CareerSourceRace **found);
 #endif
