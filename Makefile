@@ -159,6 +159,14 @@ ug2-trigger-probe: tools/ug2_trigger_probe.c
 	$(CC) $(CFLAGS) tools/ug2_trigger_probe.c -o build/ug2_trigger_probe
 .PHONY: ug2-trigger-probe
 
+# Standalone diagnostic with no dynamic glibc/SDL/OpenGL dependency.
+# Built for whichever target architecture CC currently selects; GitHub's
+# ARM64 runner uses AArch64. Device ABI is still checked independently.
+ug2-trigger-probe-static: tools/ug2_trigger_probe.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) -static tools/ug2_trigger_probe.c -o build/ug2_trigger_probe.static
+.PHONY: ug2-trigger-probe-static
+
 ug2-trigger-probe-test: tools/ug2_trigger_probe_test.c tools/ug2_trigger_probe.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) tools/ug2_trigger_probe_test.c -o build/ug2_trigger_probe_test
