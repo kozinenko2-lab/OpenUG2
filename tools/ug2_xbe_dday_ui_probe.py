@@ -29,6 +29,13 @@ CALLS = {
     0x00132745: 0x0007A9C0,  # modal gate 0
     0x00132752: 0x0007A9C0,  # modal gate 1
     0x0016D335: 0x0015E5F0,  # periodic intro update
+    0x00157B11: 0x00111010,  # DDAY A record status lookup
+    0x00157B33: 0x00110880,  # locate selected A/B event
+    0x00157B41: 0x0014D320,  # activate A or B
+    0x000AFC4E: 0x001117D0,  # alternate status-1 lookup
+    0x000AFC64: 0x00111060,  # alternate selected A/B lookup
+    0x000AFC6F: 0x0014D320,  # alternate A/B activation
+    0x001117D7: 0x00111010,  # status-1 predicate delegate
 }
 SIGNATURES = {
     "ui_command_type": (0x000B36C7, "3d1072400c"),
@@ -43,6 +50,11 @@ SIGNATURES = {
     "intro_activity_mode4_guard": (0x0015E665, "833904"),
     "intro_active_if_1_to_8": (0x00113120, "8b0185c0740883f809"),
     "intro_modal_guard": (0x00132730, "a1b85b3e0085c056"),
+    "DDAY_mode6_selector": (0x00157AF0, "a1a0bd3f00"),
+    "DDAY_A_status1": (0x00157B1A, "80780601"),
+    "DDAY_A_plus_one": (0x00157B2C, "81c102e460dd"),
+    "DDAY_A_status1_alternate": (0x001117E5, "80fa01"),
+    "DDAY_A_plus_one_alternate": (0x000AFC5E, "0502e460dd"),
 }
 
 def hash_id(identifier: str) -> int:
@@ -59,11 +71,20 @@ def intro_state_active(state: int) -> bool:
     """Exact predicate used by 0x113120: active iff state != 0 and != 9."""
     return state not in (0, 9)
 
+def resume_event_hash(dday_a_status1: bool) -> int:
+    """Hash chosen by Xbox 0x157B25..0x157B32; NOT a win predicate."""
+    return (0xDD60E402 + int(bool(dday_a_status1))) & 0xFFFFFFFF
+
 def analyze(xbe: Path) -> dict:
     data, at = xbe_load(xbe)
     digest = hashlib.sha256(data).hexdigest()
     if digest != EXPECTED_SHA256:
         raise ValueError("XBE revision not verified: " + digest)
+    # Validated switch table at Xbox 0x157B68 (mode 1..6).
+    switch = struct.unpack("<6I", at(0x00157B68, 24))
+    if switch != (0x157B02, 0x157B53, 0x157B67,
+                  0x157B58, 0x157B67, 0x157B07):
+        raise ValueError("DDAY resume selector switch table differs")
     names = []
     for label, expected in UI_NAMES.items():
         actual = hash_id(label.upper())
@@ -88,6 +109,9 @@ def analyze(xbe: Path) -> dict:
             raise ValueError("machine-code signature mismatch for " + name)
         landmarks.append({"label": name, "virtual_address": "0x%08X" % va})
     return {"sha256": digest, "ui_messages": names, "verified_calls": calls,
+            "DDAY_resume_selectors": [{"A_record_status1": int(status),
+                                       "selected_event_hash": "0x%08X" % resume_event_hash(status)}
+                                      for status in (False, True)],
             "verified_landmarks": landmarks,
             "confirmation_result_arg": [
                 {"flag20": int(flag), "already_status5": int(done),
