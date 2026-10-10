@@ -74,6 +74,8 @@ jobs:
           make career-garage-test
           make career-source-test
           make ug2-career-file-test
+          make career-event-bridge-test
+          make career-mods-test
           make ug2-career-dump
           make car-material-test
       - name: GL-backed texture cache regression without game assets

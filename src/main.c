@@ -41,6 +41,9 @@
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
+#include "ug2_career_file.h"
+#include "career_event_bridge.h"
+#include "career_mods.h"
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2085,9 +2088,12 @@ int main(int argc, char **argv) {
     const char *circuit = "ROUTESL4RF/Paths4602.bin"; int explicit_circuit = 0;
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
+    const char *career_race_id = NULL;   /* exact original GCareerRace ID */
+    const char *career_mod_path = NULL;  /* optional local authoring overlay */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
+    int laps_explicit=0;
     float world_radius = 1400.0f; /* overridable via --world-radius */
     unsigned int texture_cache_mb = 0; /* 0 keeps desktop's unbounded cache */
     for (int i = 1; i < argc; i++) {
@@ -2141,10 +2147,27 @@ int main(int argc, char **argv) {
             }
             career_save_path = argv[++i];
         }
+        else if (!strcmp(argv[i], "--career-mod")) {
+            if(i+1>=argc || !argv[i+1][0]) {
+                fprintf(stderr,"--career-mod requires a local patch path\n");
+                return 2;
+            }
+            career_mod_path=argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-race")) {
+            if(i+1>=argc || argv[i+1][0]=='-') {
+                fprintf(stderr,"--career-race needs a named original event\n");
+                return 2;
+            }
+            career_race_id=argv[++i];
+        }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--frames")  && i+1 < argc) { shotframes = atoi(argv[++i]); shotframes_set = 1; }
-        else if (!strcmp(argv[i], "--laps")    && i+1 < argc) want_laps = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--laps")    && i+1 < argc) {
+            want_laps = atoi(argv[++i]);
+            laps_explicit=1;
+        }
         else if (!strcmp(argv[i], "--track")   && i+1 < argc) trackname = argv[++i];
         else if (!strcmp(argv[i], "--circuit") && i+1 < argc) { circuit = argv[++i]; explicit_circuit = 1; }
         else if (!strcmp(argv[i], "--objdump") && i+1 < argc) objdump = argv[++i];
@@ -4186,6 +4209,66 @@ int main(int argc, char **argv) {
                n, dist, t1 - t0);
     }
 
+    /* Bind retail GCareerRace to the shipped event's PathsNNNN route.
+     * Route IDs are reused by other stages/sponsors: reject ambiguity. */
+    UG2CareerSelection career_selection={0};
+    int career_selection_ready=0;
+    if(career_race_id || career_save_path || career_mod_path) {
+        char original_globalb[1024];
+        snprintf(original_globalb,sizeof original_globalb,
+                 "%s/GLOBAL/GlobalB.lzc",dataroot);
+        UG2CareerIndex *catalog=(UG2CareerIndex *)calloc(1,sizeof *catalog);
+        int catalog_ready=catalog && ug2_career_load_file(original_globalb,catalog);
+        Career profile_check;
+        career_init(&profile_check);
+        if(career_save_path) career_load(&profile_check,career_save_path);
+        if(catalog_ready) {
+            if(career_mod_path && !ug2_career_mod_apply_file(catalog,career_mod_path)) {
+                fprintf(stderr,"career: invalid local mod %s (no changes applied)\n",
+                        career_mod_path);
+                free(catalog);
+                return 2;
+            }
+            if(career_race_id) {
+                career_selection_ready=ug2_career_select(
+                    catalog,career_race_id,profile_check.stage,&career_selection);
+                if(!career_selection_ready ||
+                   (want_event_id && want_event_id!=(int)career_selection.route_id)) {
+                    fprintf(stderr,"career: unknown/locked/multi-stage original "
+                            "race '%s' or --event mismatch (stage %u)\n",
+                            career_race_id,profile_check.stage);
+                    free(catalog);
+                    return 2;
+                }
+                want_event_id=(int)career_selection.route_id;
+            } else if(want_event_id>0 && want_event_id<=UINT16_MAX) {
+                career_selection_ready=ug2_career_unique_route(catalog,
+                         profile_check.stage,(uint16_t)want_event_id,
+                         &career_selection);
+            }
+            if(career_selection_ready && career_selection.race.laps[0]>0 && !laps_explicit)
+                want_laps=career_selection.race.laps[0];
+            if(career_selection_ready)
+                printf("career map bind: %s stage=%u route=Paths%u "
+                       "opponents=%u %s-prize=%u\n",
+                       career_selection.race.id,profile_check.stage,
+                       (unsigned)career_selection.route_id,
+                       career_selection.race.opponents,
+                       career_mod_path ? "modded" : "original",
+                       career_selection.race.cash_value);
+            else if(want_event_id)
+                printf("career map: Paths%d has no unique eligible race for "
+                       "stage %u, payout disabled\n",want_event_id,profile_check.stage);
+        } else if(career_race_id || career_mod_path) {
+            fprintf(stderr,"career: missing/invalid original GlobalB.lzc: %s\n",
+                    original_globalb);
+            free(catalog);
+            return 2;
+        } else fprintf(stderr,"career: no original GlobalB.lzc: retail payouts "
+                               "disabled, free driving still available\n");
+        free(catalog);
+    }
+
     /* Boot straight into a race event if asked (--event <id>). The Phase 71/72
        load-time A-star and checkpoint self-checks that used to run here were
        removed: they asserted on load and aborted for small events (e.g. 4301,
@@ -4836,6 +4919,18 @@ int main(int argc, char **argv) {
     }
     char circlist[MAXCIRC][256]; int selcirc = 0;
     int ncirc = res_list_circuits(troot, trackname, circlist, MAXCIRC);
+    /* Never credit a legacy AI circuit from a different original route. */
+    if(career_selection_ready) {
+        int matching=-1;
+        for(int k=0;k<ncirc;k++)
+            if(ug2_career_path_matches(&career_selection,circlist[k])) {
+                matching=k;break;
+            }
+        if(matching>=0) {
+            selcirc=matching;
+            printf("career mapped AI route: %s\n",circlist[selcirc]);
+        } else printf("career: no matching AI circuit in selected region, no cash\n");
+    }
     AiRoadNet roam_roads={0};
     if(world2)ai_roads_load(&roam_roads,troot);
     CarSwitchCandidate traffic[N_ROAM_VISUALS]={0};
@@ -5888,7 +5983,9 @@ int main(int argc, char **argv) {
     /* race flow: 0 = countdown, 1 = driving, 2 = finished.  The temporary
        synthetic frontend is opt-in (`make menu`); normal builds boot directly
        into the authored free-roam pose until the real menu asset work is ready. */
-    const int COUNTDOWN = 180, LAP_TARGET = 2;
+    const int COUNTDOWN = 180;
+    const int LAP_TARGET = career_selection_ready && career_selection.race.laps[0]>0 ?
+        career_selection.race.laps[0] : 2;
 #ifdef OPENUG2_MENU
     int race_state = (shot || resident_route_audit || resident_drive_audit) ? 1 : 3;
 #else
@@ -8028,27 +8125,40 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
-            /* Only a confirmed FIRST PLACE over actual circuit opponents may
-             * affect the career. Event-free roam and solo scripted-event
-             * gate completion are NOT valid career wins. Event IDs and retail
-             * payout tables are not verified yet. The prototype 500-unit award
-             * is deliberately limited to the existing completed AI circuit. */
-            if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
-                selcirc>=0 && selcirc<ncirc && aipath.n>1) {
-                Career updated = career;
-                if (career_record_win(&updated, trackname, circlist[selcirc],
-                                      CAREER_WORLD, finish_place, nai, 500)) {
-                    int promoted = career_advance_stage(&updated);
-                    if (career_save(&updated,career_save_path)) {
-                        career = updated;
-                        printf("career verified circuit victory: %s stage=%u "
-                               "new-world-wins=%u cash=%u%s\n",
-                               circlist[selcirc], career.stage,
-                               career.world_wins, career.money,
-                               promoted ? " [STAGE UNLOCKED]" : "");
-                    } else fprintf(stderr,"career save failed: %s\n",
-                                   career_save_path);
-                } else printf("career replay: already counted, no duplicate cash\n");
+            /* Two independent confirmations: checkpoint sequence from the
+             * authored world event AND 1st place vs actual AI opponents.
+             * Never award cash for solo gates or the legacy unbound circuit.
+             * The provisional 500-credit payout is permanently disabled. */
+            if(career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
+               selcirc>=0 && selcirc<ncirc && aipath.n>1 &&
+               career_selection_ready &&
+               ug2_career_path_matches(&career_selection,circlist[selcirc])) {
+                int matched_world=(world.city.race.active &&
+                     world.city.race.finished &&
+                     world.city.race.maxlaps==(int)career_selection.race.laps[0] &&
+                     world.city.race.ev>=0 &&
+                     world.city.race.ev<world.city.nev &&
+                     world.city.ev[world.city.race.ev].id==
+                           (int)career_selection.route_id);
+                if(career_selection_ready && matched_world) {
+                    Career updated=career;
+                    if(ug2_career_award(&updated,&career_selection,
+                             (uint16_t)world.city.ev[world.city.race.ev].id,
+                             world.city.race.finished,1,finish_place,nai)) {
+                        /* Original stage unlock gates not yet reconstructed;
+                         * provisional auto-promotion must not run. */
+                        if(career_save(&updated,career_save_path)) {
+                            career=updated;
+                            printf("career verified original race %s: "
+                                   "stage=%u earned=%u cash=%u\n",
+                                   career_selection.race.id,career.stage,
+                                   career_selection.race.cash_value,career.money);
+                        } else fprintf(stderr,"career save failed: %s\n",
+                                       career_save_path);
+                    } else printf("career replay / original requirements "
+                                  "unverified: no payment\n");
+                } else printf("career AI circuit is not the finished original "
+                              "mapped event: no payment\n");
             }
         }
 
@@ -9738,6 +9848,14 @@ int main(int argc, char **argv) {
                 glUniform3f(uColor,0.65f,0.85f,0.50f);
                 draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
                           0.12f,0.012f,0.02f);
+            }
+            if (career_save_path && career_selection_ready && race_state==3) {
+                char prize_label[160];
+                snprintf(prize_label,sizeof prize_label,"EVENT %s %u CASH",
+                         career_selection.race.id,career_selection.race.cash_value);
+                glUniform3f(uColor,0.88f,0.79f,0.45f);
+                draw_text(&quad,uMVP,prize_label,-text_width(prize_label,0.010f)/2,
+                          0.06f,0.010f,0.018f);
             }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
