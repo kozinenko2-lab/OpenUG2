@@ -29,6 +29,8 @@ jobs:
         run: |
           bash -n portmaster/OpenUG2.sh
           bash tools/portmaster_mock_test.sh
+          python3 tools/import_nfsu2_data_test.py
+          python3 -c 'import json; p=json.load(open("portmaster/port.json")); assert "aarch64" in p["attr"]["arch"]; assert p["items"] == ["OpenUG2.sh","openug2"]'
           test -f portmaster/openug2/gamecontrollerdb-h700.txt
       - name: Compile ARM64 OpenGL ES2 renderer
         run: |
