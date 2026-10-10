@@ -111,6 +111,12 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
 fi
 
 cd "$GAMEDIR" || exit 1
+# Optional local career mod, parsed safely in memory; no game archive writes.
+MOD_ARGS=()
+if [ -f "$GAMEDIR/mods/career.cfg" ]; then
+    MOD_ARGS=(--career-mod "$GAMEDIR/mods/career.cfg")
+    printf 'Career mod config: %s\n' "$GAMEDIR/mods/career.cfg"
+fi
 # Run firmware-specific platform helper if provided by PortMaster.
 if declare -F pm_platform_helper >/dev/null 2>&1; then
     pm_platform_helper "$BIN"
@@ -121,6 +127,7 @@ fi
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
     --career-save "$GAMEDIR/saves/career.dat" \
+    "${MOD_ARGS[@]}" \
     --track "$TRACK" \
     --car "$CAR" \
     --traffic "$TRAFFIC" \

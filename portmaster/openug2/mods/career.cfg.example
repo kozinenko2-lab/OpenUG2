@@ -1,0 +1,11 @@
+# OpenUG2 UG2 career metadata overrides (UTF-8/ASCII)
+# Rename to career.cfg and keep in ports/openug2/mods/ to enable.
+# Get the exact case-sensitive event names from:
+#   ./build/ug2_career_dump /path/to/GLOBAL/GlobalB.lzc
+# Syntax: cash EXACT_ORIGINAL_EVENT_ID 0..10000000
+# Example (disabled until you remove '#'):
+# cash S3_SPRINT_6 2000
+#
+# This release PREVIEWS the modified catalog and logs it at game startup.
+# Real race payout currently stays in prototype mode until event mapping
+# and verified race completion are connected; mods are NOT live payouts yet.
