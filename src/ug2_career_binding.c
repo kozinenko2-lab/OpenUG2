@@ -74,9 +74,20 @@ static int original_circuit_unlocked(const UG2CareerIndex *cat,
                r->sponsor_gate==0 && r->required_races==0 &&
                r->required_urls==0;
     if(r->unlock_method==0 && profile && r->prerequisite_key) {
-        const CareerSourceRace *pre=ug2_career_prerequisite(cat,r);
-        return pre && pre!=r && pre->stage<=stage &&
-               career_has_win(profile,"UG2_ORIGINAL",pre->id,CAREER_WORLD);
+        /* Follow the complete original specific-win ancestry, not merely the
+         * immediate predecessor. The DDAY stage-1 intro requires BOTH B and
+         * A to be saved; B alone (e.g. damaged legacy profile) is insufficient.
+         * Capped depth rejects cyclic or malicious source catalogs. */
+        const CareerSourceRace *cursor=r;
+        for(uint32_t depth=0;depth<cat->unique_races;depth++) {
+            if(cursor->unlock_method!=0 || !cursor->prerequisite_key)
+                return depth>0;
+            const CareerSourceRace *pre=ug2_career_prerequisite(cat,cursor);
+            if(!pre || pre==cursor || pre->stage>stage ||
+               !career_has_win(profile,"UG2_ORIGINAL",pre->id,CAREER_WORLD))
+                return 0;
+            cursor=pre;
+        }
     }
     return 0;
 }

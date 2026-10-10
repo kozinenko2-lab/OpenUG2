@@ -44,6 +44,7 @@
 #include "ug2_career_file.h"
 #include "ug2_career_binding.h"
 #include "ug2_career_credit.h"
+#include "ug2_career_prologue.h"
 #include "ug2_career_mod.h"
 #include "world_capture_policy.h"
 #include "world_scenery.h"
@@ -5963,6 +5964,21 @@ int main(int argc, char **argv) {
                 printf("career retail catalog: %u unique races, %u sections; "
                        "career stage %u\n",retail_career->unique_races,
                        retail_career->career_sections,career.stage);
+                /* Informational only: both original DDAY entries share
+                 * Paths4000, have zero laps/AI and need a separate scripted
+                 * finish detector. Do NOT mark them complete from a route. */
+                if(career.stage==1) {
+                    const char *dday_ids[]={"DDAY_EVENT_A","DDAY_EVENT_B"};
+                    const char *states[]={ "invalid catalog", "locked",
+                                           "awaiting verified script finish",
+                                           "already completed" };
+                    for(unsigned pi=0;pi<2;pi++) {
+                        UG2PrologueState state=ug2_prologue_state(
+                            retail_career,&career,dday_ids[pi]);
+                        printf("career prologue: %s: %s\n",dday_ids[pi],
+                               states[(unsigned)state<=3u?(unsigned)state:0u]);
+                    }
+                }
                 /* WEvent IDs come from shipped ROUTES/Paths####.bin metadata,
                  * not an invented race-to-map table.
                  * Multiple career races may use the same route. */
