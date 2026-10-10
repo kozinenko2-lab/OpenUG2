@@ -53,6 +53,11 @@ jobs:
           career_code=$?
           set -e
           test "$career_code" -eq 2 || { cat /tmp/missing-career-path.log; exit 1; }
+          set +e
+          ./nfsu2 --career-mod > /tmp/missing-career-mod.log 2>&1
+          mod_code=$?
+          set -e
+          test "$mod_code" -eq 2 || { cat /tmp/missing-career-mod.log; exit 1; }
           for bad in abc -1 1025 999999999999; do
             set +e
             ./nfsu2 /tmp/no-nfsu2-data --texture-cache-mb "$bad" > /tmp/invalid-cache.log 2>&1
