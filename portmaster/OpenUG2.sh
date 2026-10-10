@@ -111,12 +111,29 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
 fi
 
 cd "$GAMEDIR" || exit 1
+# Optional machine-readable game mods: only applied to an in-memory verified
+# original UG2 catalog; GlobalB.lzc and career saves are never rewritten.
+CAREER_EXTRA=()
+if [ -f "$GAMEDIR/mods/career_rewards.cfg" ]; then
+    CAREER_EXTRA+=(--career-mod "$GAMEDIR/mods/career_rewards.cfg")
+fi
+# Set this explicitly when multiple career races use the same map route.
+# Example: --career-race S3_CIRCUIT_10 with --circuit .../Paths4081.bin.
+CAREER_RACE_ID=""
+CAREER_CIRCUIT=""
+if [ -n "$CAREER_RACE_ID" ]; then
+    CAREER_EXTRA+=(--career-race "$CAREER_RACE_ID")
+fi
+if [ -n "$CAREER_CIRCUIT" ]; then
+    CAREER_EXTRA+=(--circuit "$CAREER_CIRCUIT")
+fi
 # Run firmware-specific platform helper if provided by PortMaster.
 if declare -F pm_platform_helper >/dev/null 2>&1; then
     pm_platform_helper "$BIN"
 fi
 # Don't force SDL_VIDEODRIVER; let firmware select its EGL/GLES2 backend.
 "$BIN" "$DATA" \
+    "${CAREER_EXTRA[@]}" \
     --resolution "$RESOLUTION" \
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
