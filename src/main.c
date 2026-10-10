@@ -5989,7 +5989,7 @@ int main(int argc, char **argv) {
             nai=selected->opponents;
             LAP_TARGET=selected->laps[0];
             printf("career circuit armed: %s track=%u laps=%d rivals=%d "
-                   "retail-prize=%u\\n",
+                   "retail-prize=%u\n",
                    selected->id,route,LAP_TARGET,nai,selected->cash_value);
         }
     }
@@ -6466,7 +6466,7 @@ int main(int argc, char **argv) {
                                 nai=selected->opponents;
                                 LAP_TARGET=selected->laps[0];
                                 printf("career circuit armed: %s route=%u "
-                                       "laps=%d rivals=%d prize=%u\\n",
+                                       "laps=%d rivals=%d prize=%u\n",
                                        selected->id,route,LAP_TARGET,nai,
                                        selected->cash_value);
                             }
