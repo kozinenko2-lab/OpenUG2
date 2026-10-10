@@ -127,7 +127,12 @@ if [ "$TRIGGER_AUDIT" = "1" ]; then
     fi
     # Own-output diagnostic; no save/write operations against the game data.
     # The scanner reports raw references, NEVER confirmed trigger positions.
-    PROBE="$GAMEDIR/ug2_trigger_probe"
+    # Prefer static AArch64 binary: older PortMaster libc may not be
+    # compatible with the native Ubuntu ARM64 CI build.
+    PROBE="$GAMEDIR/ug2_trigger_probe.static"
+    if [ ! -x "$PROBE" ]; then
+        PROBE="$GAMEDIR/ug2_trigger_probe"
+    fi
     if [ -n "$DEVICE_ARCH" ] &&
        [ -x "$GAMEDIR/ug2_trigger_probe.$DEVICE_ARCH" ]; then
         PROBE="$GAMEDIR/ug2_trigger_probe.$DEVICE_ARCH"
