@@ -1,0 +1,30 @@
+{
+  "version": 4,
+  "name": "openug2.zip",
+  "items": [
+    "OpenUG2.sh",
+    "openug2"
+  ],
+  "items_opt": [],
+  "attr": {
+    "title": "OpenUG2 (NFS Underground 2)",
+    "porter": [
+      "kozinenko2-lab",
+      "OpenUG2 contributors"
+    ],
+    "desc": "Experimental native ARM64/OpenGL ES2 engine for NFS Underground 2. Basic driving, AI and career prototype; requires own PC game data. H700 device playthrough not yet verified.",
+    "inst": "Copy legally owned PC game data to openug2/game (TRACKS, CARS, etc.); place an H700-compatible ARM64 binary as openug2/nfsu2 or openug2/nfsu2.aarch64.",
+    "genres": [
+      "racing"
+    ],
+    "rtr": false,
+    "exp": true,
+    "runtime": [],
+    "store": [],
+    "availability": "full",
+    "reqs": [],
+    "arch": [
+      "aarch64"
+    ]
+  }
+}
