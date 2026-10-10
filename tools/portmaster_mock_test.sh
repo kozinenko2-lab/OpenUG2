@@ -49,6 +49,23 @@ grep -Fq "EXEC_PATH:$root/ports/openug2/nfsu2.aarch64" "$log"
 test -d "$root/ports/openug2/saves"
 test -d "$root/ports/openug2/conf"
 grep -Fq "libs.aarch64" "$log"
+# Data-only mods are strictly opt-in and placed inside game folder.
+mkdir -p "$root/ports/openug2/mods"
+printf 'STAGE_1_CIRCUIT_1=420\n' > "$root/ports/openug2/mods/career_rewards.ini"
+PORTMASTER_CONTROL_DIR="$root/pm" ENABLE_CAREER_MODS=1 \
+    CAREER_RACE_ID=STAGE_1_CIRCUIT_1 bash "$root/ports/OpenUG2.sh"
+grep -Fq 'ARG:--career-mods' "$log"
+grep -Fq 'ARG:STAGE_1_CIRCUIT_1' "$log"
+grep -Fq 'ARG:--career-race' "$log"
+rm "$root/ports/openug2/mods/career_rewards.ini"
+set +e
+PORTMASTER_CONTROL_DIR="$root/pm" ENABLE_CAREER_MODS=1 \
+    bash "$root/ports/OpenUG2.sh"
+mod_status=$?
+set -e
+test "$mod_status" -eq 3
+grep -Fq 'Career modifications enabled but missing' "$log"
+! grep -Fq 'MOCK_BINARY' "$log"
 # Missing assets must reject launch without running the game.
 rm -r "$root/ports/openug2/game/CARS"
 set +e
