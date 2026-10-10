@@ -15,7 +15,7 @@ static void race_test(void) {
     const unsigned trigger_at=(unsigned)sizeof("RACE_ALPHA");
     uint8_t d[0x88]={0};
     p16(d,0);p16(d+6,trigger_at);
-    d[0x0c]=2; p32(d+0x10,0x12345678u);
+    d[0x0c]=2; d[0x0f]=1; p32(d+0x10,0x12345678u);
     /* In non-specific-race mode the +0x10 union stores four byte gates;
      * the same four bytes also form prerequisite_key (not both independent). */
     d[0x12]=6;d[0x13]=2;p32(d+0x14,100);
@@ -27,7 +27,7 @@ static void race_test(void) {
     memset(&out,0xa5,sizeof out);
     assert(career_source_decode_race(d,sizeof d,names,sizeof names,&out));
     assert(!strcmp(out.id,"RACE_ALPHA") && !strcmp(out.trigger,"START_A"));
-    assert(out.stage==2 && out.cash_value==1250 &&
+    assert(out.event_behavior==1 && out.stage==2 && out.cash_value==1250 &&
            out.opponents==3 && out.num_stages==2);
     assert(out.track_ids[0]==0x1234 && out.laps[0]==3);
     assert(out.track_ids[1]==0x4567 && out.laps[1]==2);
