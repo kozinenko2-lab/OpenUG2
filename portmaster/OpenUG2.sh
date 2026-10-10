@@ -6,6 +6,11 @@ TEXTURE_CACHE_MB="96"
 TRACK="STREAML4RA"
 CAR="HUMMER"
 TRAFFIC="0"
+# Empty = regular race selector. Set an exact original GCareerRace ID here
+# to launch the mapped world route (e.g. STAGE_1_CIRCUIT_1).
+CAREER_RACE=""
+# Empty = stock cash values. Filename within openug2/mods/ for local tuning.
+CAREER_MOD=""
 
 # PortMaster layout based on Detoy/OpenUG2 (R36S), plus H700 fallback paths.
 # Native SDL2 handles the controller; GPTOKEYB is not required.
@@ -111,12 +116,28 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
 fi
 
 cd "$GAMEDIR" || exit 1
+EXTRA_ARGS=()
+if [ -n "$CAREER_RACE" ]; then
+    if [[ ! "$CAREER_RACE" =~ ^[A-Z0-9_]+$ ]]; then
+        echo "CAREER_RACE must be an original uppercase race ID"; exit 2
+    fi
+    EXTRA_ARGS+=(--career-race "$CAREER_RACE")
+fi
+if [ -n "$CAREER_MOD" ]; then
+    if [[ ! "$CAREER_MOD" =~ ^[a-zA-Z0-9_.-]+$ ]] || [[ "$CAREER_MOD" == *..* ]]; then
+        echo "CAREER_MOD must be a simple filename under openug2/mods"; exit 2
+    fi
+    if [ ! -f "$GAMEDIR/mods/$CAREER_MOD" ]; then
+        echo "Career mod not found: $GAMEDIR/mods/$CAREER_MOD"; exit 2
+    fi
+    EXTRA_ARGS+=(--career-mod "$GAMEDIR/mods/$CAREER_MOD")
+fi
 # Run firmware-specific platform helper if provided by PortMaster.
 if declare -F pm_platform_helper >/dev/null 2>&1; then
     pm_platform_helper "$BIN"
 fi
 # Don't force SDL_VIDEODRIVER; let firmware select its EGL/GLES2 backend.
-"$BIN" "$DATA" \
+"$BIN" "$DATA" "${EXTRA_ARGS[@]}" \
     --resolution "$RESOLUTION" \
     --world-radius "$WORLD_RADIUS" \
     --texture-cache-mb "$TEXTURE_CACHE_MB" \
