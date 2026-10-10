@@ -50,8 +50,16 @@ until GitHub Issues are enabled for this fork. All EA assets remain local.
       prototype payout; display career stage/cash in pre-race UI and HUD.
 - [ ] Classify authored race IDs, URL and sponsorship contracts from actual
       game assets; current auto-award is restricted to existing AI circuits.
-- [ ] Design persistent garage ownership, purchased modifications, tuning,
-      event unlock registry and save-schema upgrade.
+- [x] Create versioned v2 garage-in-profile persistence with v1 migration,
+      per-car performance ownership, credit debits and atomic save.
+- [x] Fix menu car/track selection to queue changes before committing successful
+      in-process asset loads (avoid same-index no-op on pending requests).
+- [ ] Wire controller-driven starter selection and dealer/garage navigation to
+      model ownership; loaded profile must select/render owned active car.
+- [ ] Apply purchased performance tiers to real car physics and store cosmetics.
+- [ ] Add shop inventory/pricing/unlock registry verified against source game
+      data; do not treat arbitrary available CARS folders as owned/unlocked.
+- [ ] Build authored event unlock registry and source-verified race rewards.
 - [ ] Validate stage gate requirements and retail payouts against game behavior.
 - [ ] Crash-safe atomic save, backup and failed-checksum handling; no retail save overwrite.
 - [ ] Implement payouts, sponsors, unlocks, shops, car purchases and upgrades.
