@@ -117,6 +117,71 @@ static int collect_entry(const CareerSourceEntry *entry, void *ctx) {
     } else return 0;
     return 1;
 }
+/* Read-only original WorldShop catalogue. Based on the MIT NFSTools
+ * GlobalLib WorldShop field map; no coordinates, trigger completion or
+ * decompiled executable routines are available in these 0xA0 records.
+ * Do not coalesce two CareerManager sections: retail stage/hidden bits differ.
+ * Stage is kept raw (valid retail special shops have stage=10). */
+static int shop_ascii(const uint8_t *src,size_t width,
+                      char *dst,int allow_empty) {
+    size_t i=0;
+    for(;i<width;i++) {
+        const unsigned char b=src[i];
+        if(!b) {
+            if(!allow_empty && !i)return 0;
+            dst[i]=0;
+            return 1;
+        }
+        if(b<32 || b>126)return 0;
+        dst[i]=(char)b;
+    }
+    return 0; /* original field lacked terminator */
+}
+static int scan_shops(const uint8_t *block,size_t length,
+                      UG2CareerIndex *out,uint8_t section,
+                      unsigned *total) {
+    if(!block || !total || length<8 || rd32(block)!=UG2_CAREER_MAIN_TAG ||
+       (size_t)rd32(block+4)!=length-8)return 0;
+    int found=0;
+    for(size_t off=8;off<length;) {
+        if(length-off<8)return 0;
+        uint32_t id=rd32(block+off);
+        size_t len=rd32(block+off+4);
+        if(len>length-off-8)return 0;
+        if(id==UINT32_C(0x00034A12)) {
+            if(found++ || len%0xA0u)return 0;
+            unsigned count=(unsigned)(len/0xA0u);
+            if(count>UG2_CAREER_MAX_SHOPS-*total)return 0;
+            for(unsigned i=0;i<count;i++) {
+                const uint8_t *p=block+off+8+i*0xA0u;
+                UG2CareerShop shop={0};
+                if(!shop_ascii(p,0x20u,shop.name,0) ||
+                   !shop_ascii(p+0x20u,0x18u,shop.intro_movie,1) ||
+                   !shop_ascii(p+0x40u,0x10u,shop.filename,1) ||
+                   p[0x50]>6 || p[0x51]>1 || p[0x9C]>1)
+                    return 0;
+                shop.trigger_key=rd32(p+0x3C);
+                shop.required_event=rd32(p+0x74);
+                shop.shop_type=p[0x50];
+                shop.initially_hidden=p[0x51];
+                shop.unlocked_by_event=p[0x9C];
+                shop.stage=p[0x9D];
+                shop.section=section;
+                if(out) {
+                    for(uint32_t j=0;j<out->shop_records;j++) {
+                        const UG2CareerShop *other=&out->shops[j];
+                        if(other->section==section &&
+                           strcmp(other->name,shop.name)==0)return 0;
+                    }
+                    out->shops[out->shop_records++]=shop;
+                }
+            }
+            *total+=count;
+        }
+        off+=8+len;
+    }
+    return 1; /* archives without shops remain parseable */
+}
 int ug2_career_scan(const uint8_t *bytes, size_t size, UG2CareerIndex *out) {
     if(!bytes || !out || size<8 || size>UG2_GLOBALB_MAX_BYTES) return 0;
     unsigned seen=0;
@@ -126,6 +191,7 @@ int ug2_career_scan(const uint8_t *bytes, size_t size, UG2CareerIndex *out) {
         UG2CareerIndex *next=NULL;
         if(pass==1){next=(UG2CareerIndex *)calloc(1,sizeof *next);if(!next)return 0;}
         Collector col={next,0,0};
+        unsigned shop_total=0;
         size_t off=0;
         while(off<size) {
             if(size-off<8){free(next);return 0;}
@@ -137,7 +203,10 @@ int ug2_career_scan(const uint8_t *bytes, size_t size, UG2CareerIndex *out) {
                 CareerSourceCounts n={0};
                 int valid=career_source_iterate_main_block(bytes+off,8+len,
                     pass?collect_entry:NULL,pass?&col:NULL,&n);
-                if(!valid){free(next);return 0;}
+                if(!valid || !scan_shops(bytes+off,8+len,next,
+                                            (uint8_t)col.section,&shop_total)) {
+                    free(next);return 0;
+                }
                 if(pass==1) next->career_sections++;
                 col.section++;
             }
