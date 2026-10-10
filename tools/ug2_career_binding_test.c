@@ -11,6 +11,8 @@ static CareerSourceRace *add(UG2CareerIndex *cat,const char *id,
     snprintf(r->id,sizeof r->id,"%s",id);
     r->track_ids[0]=(uint16_t)route;r->stage=(uint8_t)stage;
     r->laps[0]=(uint8_t)laps;r->opponents=(uint8_t)opponents;
+    r->unlock_method=1; /* AT_STAGE_START from GlobalLib */
+    r->required_specific_url=(uint8_t)(stage-1);
     r->num_stages=1;r->icon_type=(uint8_t)icon;r->cash_value=350;
     return r;
 }
@@ -51,12 +53,28 @@ int main(void) {
     /* Retail stage 1 opens a 3-lap, 3-opponent circuit on Paths4013.bin.
      * The game must discover these values BEFORE arming a race, then verify
      * the same values at the finish. */
-    add(c,"STAGE_1_CIRCUIT_1",4013,1,3,3,3)->cash_value=250;
-    assert(ug2_career_resolve_circuit(c,1,4013,NULL,0,0,&found)==UG2_BIND_MATCH);
-    assert(found && found->laps[0]==3 && found->opponents==3 &&
-           found->cash_value==250);
-    assert(ug2_career_resolve_circuit(c,1,4013,NULL,3,3,&found)==UG2_BIND_MATCH);
-    assert(ug2_career_resolve_circuit(c,1,4013,NULL,2,3,&found)==UG2_BIND_NO_MATCH);
+    CareerSourceRace *intro=add(c,"STAGE_1_CIRCUIT_1",4013,1,3,3,3);
+    intro->cash_value=250;
+    intro->unlock_method=0; /* SPECIFIC_RACE_WON in the retail file */
+    intro->prerequisite_key=0xdd60e403u;
+    /* Stage-1 intro is not actually available at the very beginning.
+     * Its scripted precursor has a hashed unlock dependency we do not
+     * currently persist.  Do not fabricate a stage-start unlock. */
+    assert(ug2_career_resolve_circuit(c,1,4013,NULL,0,0,&found)==UG2_BIND_NO_MATCH);
+    assert(ug2_career_resolve_circuit(c,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    /* Lock gates from GlobalLib: requested retail ID must not unlock
+     * sponsor, race-count or URL-gated races just because the route exists. */
+    CareerSourceRace *locked=add(c,"S3_CIRCUIT_18",4091,3,2,3,3);
+    for(unsigned u=0;u<=4;u++)if(u!=1) {
+        locked->unlock_method=(uint8_t)u;
+        assert(ug2_career_resolve_circuit(c,3,4091,locked->id,2,3,&found)==UG2_BIND_NO_MATCH);
+    }
+    locked->unlock_method=1; locked->required_specific_url=3;
+    assert(ug2_career_resolve_circuit(c,3,4091,locked->id,2,3,&found)==UG2_BIND_NO_MATCH);
+    locked->required_specific_url=2; locked->required_races=1;
+    assert(ug2_career_resolve_circuit(c,3,4091,locked->id,2,3,&found)==UG2_BIND_NO_MATCH);
+    locked->required_races=0;
+    assert(ug2_career_resolve_circuit(c,3,4091,locked->id,2,3,&found)==UG2_BIND_MATCH);
     add(c,"S3_SPON_CIRCUIT_12",4083,3,2,3,1);
     add(c,"S3_URL_12",4711,3,4,5,2);
     add(c,"S3_DRIFT_12",4312,3,3,0,3);
