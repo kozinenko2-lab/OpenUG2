@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-/* The OpenUG2 path catalog produces ROUTESL4R*/PathsNNNN.bin. Names
+/* The OpenUG2 path catalog produces ROUTES<region>/PathsNNNN.bin. Names
  * from the retail GlobalLib file reference the same numeric track IDs.
  * Do not accept 'Paths4013.bin.bak' or suffixes as a real circuit. */
 int ug2_career_route_id(const char *route_path) {
