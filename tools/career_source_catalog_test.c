@@ -16,6 +16,8 @@ static void race_test(void) {
     uint8_t d[0x88]={0};
     p16(d,0);p16(d+6,trigger_at);
     d[0x0c]=2; p32(d+0x10,0x12345678u);
+    /* In non-specific-race mode the +0x10 union stores four byte gates;
+     * the same four bytes also form prerequisite_key (not both independent). */
     d[0x12]=6;d[0x13]=2;p32(d+0x14,100);
     p16(d+0x18,0x1234);d[0x1b]=3;
     p16(d+0x1c,0x4567);d[0x1f]=2;
@@ -29,7 +31,7 @@ static void race_test(void) {
            out.opponents==3 && out.num_stages==2);
     assert(out.track_ids[0]==0x1234 && out.laps[0]==3);
     assert(out.track_ids[1]==0x4567 && out.laps[1]==2);
-    assert(out.unlock_method==2 && out.prerequisite_key==0x12345678u);
+    assert(out.unlock_method==2 && out.prerequisite_key==0x02065678u);
     assert(out.required_races==6 && out.required_urls==2);
     CareerSourceRace copy=out;
     assert(!career_source_decode_race(d,sizeof d-1,names,sizeof names,&out));
