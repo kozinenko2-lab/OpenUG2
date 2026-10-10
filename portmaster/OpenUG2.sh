@@ -3,6 +3,10 @@
 RESOLUTION="640x480"
 WORLD_RADIUS="500"
 TEXTURE_CACHE_MB="96"
+# Explicitly enable once for ORIGINAL shop-trigger reference diagnostics.
+# Disabled for normal gameplay; scanning up to 512 MiB can be slow on H700.
+TRIGGER_AUDIT="0"
+TRIGGER_AUDIT_MAX_MIB="512"
 TRACK="STREAML4RA"
 CAR="HUMMER"
 TRAFFIC="0"
@@ -115,6 +119,33 @@ if [ ! -d "$DATA/TRACKS" ] || [ ! -d "$DATA/CARS" ]; then
 fi
 
 cd "$GAMEDIR" || exit 1
+if [ "$TRIGGER_AUDIT" = "1" ]; then
+    if [[ ! "$TRIGGER_AUDIT_MAX_MIB" =~ ^[0-9]+$ ]] ||
+       (( 10#$TRIGGER_AUDIT_MAX_MIB < 32 ||
+          10#$TRIGGER_AUDIT_MAX_MIB > 4096 )); then
+        echo "Invalid TRIGGER_AUDIT_MAX_MIB (32..4096)"; exit 2
+    fi
+    # Own-output diagnostic; no save/write operations against the game data.
+    # The scanner reports raw references, NEVER confirmed trigger positions.
+    # Prefer static AArch64 binary: older PortMaster libc may not be
+    # compatible with the native Ubuntu ARM64 CI build.
+    PROBE="$GAMEDIR/ug2_trigger_probe.static"
+    if [ ! -x "$PROBE" ]; then
+        PROBE="$GAMEDIR/ug2_trigger_probe"
+    fi
+    if [ -n "$DEVICE_ARCH" ] &&
+       [ -x "$GAMEDIR/ug2_trigger_probe.$DEVICE_ARCH" ]; then
+        PROBE="$GAMEDIR/ug2_trigger_probe.$DEVICE_ARCH"
+    fi
+    if [ -x "$PROBE" ]; then
+        echo "Shop-trigger audit enabled (raw references only)."
+        "$PROBE" "$DATA" --max-mib "$TRIGGER_AUDIT_MAX_MIB" \
+            >"$LOGDIR/OpenUG2_TriggerAudit.log" 2>&1
+        echo "Shop-trigger audit exit status: $?; log: $LOGDIR/OpenUG2_TriggerAudit.log"
+    else
+        echo "Shop-trigger audit requested but ug2_trigger_probe missing."
+    fi
+fi
 # Optional machine-readable game mods: only applied to an in-memory verified
 # original UG2 catalog; GlobalB.lzc and career saves are never rewritten.
 CAREER_EXTRA=()
