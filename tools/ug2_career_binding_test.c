@@ -70,9 +70,31 @@ int main(void) {
     CareerSourceRace *prologue=add(c,"DDAY_EVENT_B",4000,0,1,0,0);
     assert(ug2_career_prerequisite(c,intro)==prologue);
     assert(ug2_career_resolve_circuit(c,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    /* An uncompleted predecessor remains locked, even when explicitly
+     * selected by ID. The legacy NULL-profile resolver also stays locked. */
+    Career profile; career_init(&profile);
+    assert(ug2_career_resolve_circuit_for_profile(
+        c,&profile,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH && !found);
+    assert(career_record_win(&profile,"SOME_OTHER_DOMAIN",prologue->id,
+                             CAREER_WORLD,1,1,0));
+    assert(ug2_career_resolve_circuit_for_profile(
+        c,&profile,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    /* In production only a verified finish may create this canonical win.
+     * The synthetic test injects that verified outcome through Career API. */
+    assert(career_record_win(&profile,"UG2_ORIGINAL",prologue->id,
+                             CAREER_WORLD,1,1,0));
+    assert(ug2_career_resolve_circuit_for_profile(
+        c,&profile,1,4013,intro->id,3,3,&found)==UG2_BIND_MATCH && found==intro);
+    assert(ug2_career_resolve_circuit_for_profile(
+        c,&profile,1,4013,NULL,0,0,&found)==UG2_BIND_MATCH && found==intro);
+    assert(ug2_career_resolve_circuit_for_profile(
+        c,&profile,2,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
+    assert(ug2_career_resolve_circuit(c,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
     /* Unknown precursor hash and unsupported non-specific methods fail. */
     intro->prerequisite_key=0x12345678u;
     assert(ug2_career_prerequisite(c,intro)==NULL);
+    assert(ug2_career_resolve_circuit_for_profile(
+        c,&profile,1,4013,intro->id,3,3,&found)==UG2_BIND_NO_MATCH);
     intro->prerequisite_key=0xdd60e403u;
     intro->unlock_method=2;
     assert(ug2_career_prerequisite(c,intro)==NULL);
