@@ -15,11 +15,13 @@ read-only C-инструмент `tools/ug2_trigger_probe.c`.
 
 ## Использование
 
-Собрать нативный бинарник на Linux/ARM64:
+Собрать обычный и **статический** бинарники на Linux/ARM64
+(статический не требует системного динамического загрузчика):
 
 ```sh
 make ug2-trigger-probe
-./build/ug2_trigger_probe /path/to/original/NFSU2 --max-mib 512 \
+make ug2-trigger-probe-static
+./build/ug2_trigger_probe.static /path/to/original/NFSU2 --max-mib 512 \
     > ./OpenUG2_TriggerAudit.log
 ```
 
@@ -29,8 +31,9 @@ make ug2-trigger-probe
 make ug2-trigger-probe-test
 ```
 
-На PortMaster скопировать скомпилированный `ug2_trigger_probe`
-рядом с `nfsu2` и включить в верхней части `OpenUG2.sh`:
+На PortMaster скопировать скомпилированный
+`build/ug2_trigger_probe.static` в папку игры рядом с `nfsu2`
+под именем `ug2_trigger_probe.static` и включить в верхней части `OpenUG2.sh`:
 
 ```bash
 TRIGGER_AUDIT="1"
