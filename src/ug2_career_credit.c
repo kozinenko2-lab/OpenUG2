@@ -16,8 +16,8 @@ UG2CreditResult ug2_career_credit_circuit(
        profile->stage>CAREER_MAX_STAGE)
         return UG2_CREDIT_NOT_ELIGIBLE;
     const CareerSourceRace *resolved=NULL;
-    UG2BindResult match=ug2_career_resolve_circuit(
-        catalog,profile->stage,route,requested_race_id,
+    UG2BindResult match=ug2_career_resolve_circuit_for_profile(
+        catalog,profile,profile->stage,route,requested_race_id,
         completed_laps,actual_opponents,&resolved);
     if(match==UG2_BIND_AMBIGUOUS)return UG2_CREDIT_AMBIGUOUS;
     if(match!=UG2_BIND_MATCH || !resolved)return UG2_CREDIT_NOT_ELIGIBLE;
