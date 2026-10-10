@@ -5911,7 +5911,8 @@ int main(int argc, char **argv) {
     /* race flow: 0 = countdown, 1 = driving, 2 = finished.  The temporary
        synthetic frontend is opt-in (`make menu`); normal builds boot directly
        into the authored free-roam pose until the real menu asset work is ready. */
-    const int COUNTDOWN = 180, LAP_TARGET = 2;
+    const int COUNTDOWN = 180;
+    int LAP_TARGET = 2; /* normal preview; authored career laps on race arm */
 #ifdef OPENUG2_MENU
     int race_state = (shot || resident_route_audit || resident_drive_audit) ? 1 : 3;
 #else
@@ -5973,6 +5974,23 @@ int main(int argc, char **argv) {
                                     count,career.stage);
                 }
             }
+        }
+    }
+    /* Non-menu/--circuit builds may already have loaded their circuit AI.
+     * Trim the active AI count to the original race's opponent count, and
+     * arm the original lap count. Do not change any free-roam AI counts. */
+    if(retail_career && ai_race && ncirc>0 &&
+       selcirc>=0 && selcirc<ncirc) {
+        const unsigned route=ug2_route_from_path(circlist[selcirc]);
+        const CareerSourceRace *selected=NULL;
+        if(ug2_career_resolve_circuit(retail_career,career.stage,route,
+                                      career_race_id,0,0,&selected)
+           ==UG2_BIND_MATCH && selected && selected->opponents<=nai) {
+            nai=selected->opponents;
+            LAP_TARGET=selected->laps[0];
+            printf("career circuit armed: %s track=%u laps=%d rivals=%d "
+                   "retail-prize=%u\\n",
+                   selected->id,route,LAP_TARGET,nai,selected->cash_value);
         }
     }
 #ifdef OPENUG2_MENU
@@ -6436,6 +6454,23 @@ int main(int argc, char **argv) {
                         }
                         nai=ncirc?load_roaming_circuit(dataroot,circlist[selcirc],
                             &scene,&aipath,ais,carpos,&start_idx):0;
+                        LAP_TARGET=2;
+                        if(ncirc>0 && selcirc>=0 && selcirc<ncirc && retail_career) {
+                            const unsigned route=ug2_route_from_path(circlist[selcirc]);
+                            const CareerSourceRace *selected=NULL;
+                            UG2BindResult match=ug2_career_resolve_circuit(
+                                retail_career,career.stage,route,career_race_id,
+                                0,0,&selected);
+                            if(match==UG2_BIND_MATCH && selected &&
+                               selected->opponents<=nai) {
+                                nai=selected->opponents;
+                                LAP_TARGET=selected->laps[0];
+                                printf("career circuit armed: %s route=%u "
+                                       "laps=%d rivals=%d prize=%u\\n",
+                                       selected->id,route,LAP_TARGET,nai,
+                                       selected->cash_value);
+                            }
+                        }
                         ai_race=1;race_state = 0; racetimer = 0;   /* -> 3-2-1 countdown */
                     }
                 }
