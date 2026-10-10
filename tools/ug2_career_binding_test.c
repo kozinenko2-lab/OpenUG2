@@ -41,6 +41,17 @@ int main(void){
     assert(m.kind==CAREER_URL);
     strcpy(r->id,"S1_DRIFT_1");
     assert(!ug2_career_bind_circuit(c,r->id,"Paths4031.bin",1,3,&m));
+    c->unique_races=1;
+    r=&c->race[0];
+    assert(ug2_career_map_lookup(c,NULL,4013,1,&m));
+    assert(!strcmp(m.race_id,"STAGE_1_CIRCUIT_1") && m.payout==250);
+    assert(!ug2_career_map_lookup(c,NULL,4013,2,&m));
+    assert(!ug2_career_map_lookup(c,NULL,0,1,&m));
+    c->unique_races=2;
+    r=&c->race[1];*r=c->race[0];strcpy(r->id,"S1_H_CIRCUIT_1");
+    assert(!ug2_career_map_lookup(c,NULL,4013,1,&m));
+    assert(ug2_career_map_lookup(c,"STAGE_1_CIRCUIT_1",4013,1,&m));
+    assert(!ug2_career_map_lookup(c,"UNKNOWN",4013,1,&m));
     free(c);
     puts("ug2_career_binding_test: PASS");
     return 0;
