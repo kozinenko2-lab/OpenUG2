@@ -38,6 +38,7 @@ int career_source_decode_race(const uint8_t *d, size_t len,
     /* GCareerRace/Disassemble.cs offsets: 0x10: unlock; 0x18: route IDs,
      * 0x30: credit reward, 0x37: stage, 0x7C: opponent count. */
     next.unlock_method=d[0x0c];
+    next.event_behavior=d[0x0f];
     next.prerequisite_key=le32(d+0x10);
     next.required_specific_url=d[0x10];
     next.sponsor_gate=d[0x11];
@@ -55,7 +56,7 @@ int career_source_decode_race(const uint8_t *d, size_t len,
     next.stage=d[0x37];
     next.num_stages=d[0x7e];
     next.opponents=d[0x7c];
-    if (next.stage>5 || next.opponents>5 ||
+    if (next.stage>5 || next.event_behavior>5 || next.opponents>5 ||
         next.num_stages<1 || next.num_stages>4) return 0;
     *out=next;
     return 1;
