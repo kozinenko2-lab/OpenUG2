@@ -8089,27 +8089,37 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
-            /* Only a confirmed FIRST PLACE over actual circuit opponents may
-             * affect the career. Event-free roam and solo scripted-event
-             * gate completion are NOT valid career wins. Event IDs and retail
-             * payout tables are not verified yet. The prototype 500-unit award
-             * is deliberately limited to the existing completed AI circuit. */
-            if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
-                selcirc>=0 && selcirc<ncirc && aipath.n>1) {
-                Career updated = career;
-                if (career_record_win(&updated, trackname, circlist[selcirc],
-                                      CAREER_WORLD, finish_place, nai, 500)) {
-                    int promoted = career_advance_stage(&updated);
-                    if (career_save(&updated,career_save_path)) {
-                        career = updated;
-                        printf("career verified circuit victory: %s stage=%u "
-                               "new-world-wins=%u cash=%u%s\n",
-                               circlist[selcirc], career.stage,
-                               career.world_wins, career.money,
-                               promoted ? " [STAGE UNLOCKED]" : "");
-                    } else fprintf(stderr,"career save failed: %s\n",
-                                   career_save_path);
-                } else printf("career replay: already counted, no duplicate cash\n");
+            /* Two independent confirmations: checkpoint sequence from the
+             * authored world event AND 1st place vs actual AI opponents.
+             * Never award cash for solo gates or the legacy unbound circuit.
+             * The provisional 500-credit payout is permanently disabled. */
+            if(career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
+               selcirc>=0 && selcirc<ncirc && aipath.n>1) {
+                int matched_world=(world.city.race.active &&
+                     world.city.race.finished &&
+                     world.city.race.ev>=0 &&
+                     world.city.race.ev<world.city.nev &&
+                     world.city.ev[world.city.race.ev].id==
+                           (int)career_selection.route_id);
+                if(career_selection_ready && matched_world) {
+                    Career updated=career;
+                    if(ug2_career_award(&updated,&career_selection,
+                             (uint16_t)world.city.ev[world.city.race.ev].id,
+                             world.city.race.finished,1,finish_place,nai)) {
+                        /* Original stage unlock gates not yet reconstructed;
+                         * provisional auto-promotion must not run. */
+                        if(career_save(&updated,career_save_path)) {
+                            career=updated;
+                            printf("career verified original race %s: "
+                                   "stage=%u earned=%u cash=%u\n",
+                                   career_selection.race.id,career.stage,
+                                   career_selection.race.cash_value,career.money);
+                        } else fprintf(stderr,"career save failed: %s\n",
+                                       career_save_path);
+                    } else printf("career replay / original requirements "
+                                  "unverified: no payment\n");
+                } else printf("career AI circuit is not the finished original "
+                              "mapped event: no payment\n");
             }
         }
 
