@@ -17,7 +17,9 @@ typedef struct {
     char trigger[CAREER_SOURCE_NAME];
     uint8_t stage;            /* raw BelongsToStage, 0..5 */
     uint8_t opponents;
-    uint8_t icon_type;        /* raw eEventIconType; mapping not verified */
+    uint8_t icon_type;        /* raw eEventIconType; 3 = regular */
+    uint8_t behavior;         /* eEventBehaviorType; 0 = circuit */
+    uint8_t is_hidden;        /* IsHiddenEvent at +0x7F; no unlock support yet */
     uint8_t unlock_method;    /* raw eUnlockCondition; mapping not verified */
     uint8_t required_races;
     uint8_t required_urls;
