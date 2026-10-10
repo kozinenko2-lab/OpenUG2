@@ -75,8 +75,8 @@ static void test_scan(void){
            c->shops[2].initially_hidden==1);
     memcpy(snapshot,c,sizeof *c);
     /* Corrupted shop metadata must never publish a partial catalog. */
-    size_t shops_off=8 + 8+sizeof("UNITTEST_RACE\\0EV_UNIT\\0SPONSOR_UNIT\\0") +
-        8+0x88 + 8+0x50 + 8; /* first main block + child headers */
+    size_t shops_off=8 + 8 + 8+sizeof("UNITTEST_RACE\0EV_UNIT\0SPONSOR_UNIT\0") +
+        8+0x88 + 8+0x50 + 8; /* prefix + main + children + shop header */
     uint8_t saved=input[shops_off+0x50];
     input[shops_off+0x50]=99; /* undefined type */
     assert(!ug2_career_scan(input,pos,c));
