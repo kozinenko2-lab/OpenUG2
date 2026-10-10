@@ -9823,6 +9823,27 @@ int main(int argc, char **argv) {
                 glUniform3f(uColor,0.65f,0.85f,0.50f);
                 draw_text(&quad,uMVP,progress,-text_width(progress,0.012f)/2,
                           0.12f,0.012f,0.02f);
+                /* Same authored Paths#### ID from map/events catalog and
+                 * GlobalB career track references. Multiple races may share
+                 * one map route; this indicator is informational only. */
+                if(retail_career) {
+                    unsigned map_route=0;
+                    if(ncirc>0 && selcirc>=0 && selcirc<ncirc)
+                        map_route=ug2_route_from_path(circlist[selcirc]);
+                    else if(nsprint>0 && selsprint>=0 && selsprint<nsprint)
+                        map_route=(unsigned)world.city.ev[sprintev[selsprint]].id;
+                    if(map_route) {
+                        unsigned matches=ug2_career_map_count(retail_career,
+                                                              career.stage,map_route);
+                        char label[128];
+                        snprintf(label,sizeof label,
+                                 "MAP %u  CAREER EVENTS %u",map_route,matches);
+                        glUniform3f(uColor,0.70f,0.72f,0.95f);
+                        draw_text(&quad,uMVP,label,
+                                  -text_width(label,0.011f)/2,
+                                  0.060f,0.011f,0.02f);
+                    }
+                }
             }
             /* "press ENTER" prompt: a gently pulsing green bar */
             float pulse = 0.55f + 0.45f*sinf(menuspin*6.0f);
