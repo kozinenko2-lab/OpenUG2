@@ -42,6 +42,7 @@
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
 #include "career_event_map.h" /* verified PC GlobalB track/stage/payout link */
+#include "career_mods.h"      /* optional cash-only sidecar overlay */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2087,6 +2088,7 @@ int main(int argc, char **argv) {
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
     const char *want_retail_race_id = NULL; /* disambiguates an original event */
+    const char *career_mods_path = NULL;  /* explicit, no automatic EA file edits */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2142,6 +2144,14 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-mods")) {
+            if(i+1>=argc || !argv[i+1][0] ||
+               (argv[i+1][0]=='-' && argv[i+1][1]=='-')) {
+                fprintf(stderr,"--career-mods requires an overlay file path\n");
+                return 2;
+            }
+            career_mods_path=argv[++i];
         }
         else if (!strcmp(argv[i], "--career-race")) {
             if(i+1>=argc || !argv[i+1][0] ||
@@ -2446,6 +2456,10 @@ int main(int argc, char **argv) {
             world2_heading_set = 1;
         }
         else dataroot = argv[i];
+    }
+    if(career_mods_path && !career_save_path) {
+        fprintf(stderr,"--career-mods also requires --career-save\n");
+        return 2;
     }
     if(want_retail_race_id && !career_save_path) {
         fprintf(stderr,"--career-race also requires --career-save\n");
@@ -5939,6 +5953,13 @@ int main(int argc, char **argv) {
                    "%u sections, %u sponsors\n",
                    retail_catalog->unique_races,retail_catalog->career_sections,
                    retail_catalog->sponsor_records);
+            if(career_mods_path) {
+                unsigned patches=0;
+                if(career_mods_apply_file(retail_catalog,career_mods_path,&patches))
+                    printf("career mods: %u verified reward overrides loaded\n",patches);
+                else fprintf(stderr,"career mods: invalid sidecar, ignored "
+                                    "(original payouts remain unchanged)\n");
+            }
             if(world.city.race.active && world.city.race.ev>=0 &&
                world.city.race.ev<world.city.nev) {
                 const WEvent *event=&world.city.ev[world.city.race.ev];
