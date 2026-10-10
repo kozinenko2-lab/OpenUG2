@@ -8079,27 +8079,53 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
-            /* Only a confirmed FIRST PLACE over actual circuit opponents may
-             * affect the career. Event-free roam and solo scripted-event
-             * gate completion are NOT valid career wins. Event IDs and retail
-             * payout tables are not verified yet. The prototype 500-unit award
-             * is deliberately limited to the existing completed AI circuit. */
+            /* Only confirmed first place over real AI rivals can earn money.
+             * Match the loaded circuit's Paths#### ID to the ORIGINAL PC
+             * GlobalB career record, then verify stage, behavior, opponent
+             * count, and unlock category. World checkpoint-only events do
+             * not have a genuine ranked opponent finish yet. */
             if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
                 selcirc>=0 && selcirc<ncirc && aipath.n>1) {
-                Career updated = career;
-                if (career_record_win(&updated, trackname, circlist[selcirc],
-                                      CAREER_WORLD, finish_place, nai, 500)) {
-                    int promoted = career_advance_stage(&updated);
-                    if (career_save(&updated,career_save_path)) {
-                        career = updated;
-                        printf("career verified circuit victory: %s stage=%u "
-                               "new-world-wins=%u cash=%u%s\n",
-                               circlist[selcirc], career.stage,
-                               career.world_wins, career.money,
-                               promoted ? " [STAGE UNLOCKED]" : "");
-                    } else fprintf(stderr,"career save failed: %s\n",
-                                   career_save_path);
-                } else printf("career replay: already counted, no duplicate cash\n");
+                uint16_t authored_track=0;
+                const CareerSourceRace *authored=NULL;
+                CareerEventMatch match=retail_catalog &&
+                    career_event_path_id(circlist[selcirc],&authored_track)
+                    ? career_event_resolve(retail_catalog,authored_track,
+                        career.stage,0u,want_retail_race_id,&authored)
+                    : CAREER_EVENT_MISSING;
+                if(match==CAREER_EVENT_MATCHED &&
+                   career_event_can_credit(authored,career.stage,nai)) {
+                    Career updated=career;
+                    /* Existing v1/v2 users may have been paid provisional
+                     * cash for this very same track: never double-award on
+                     * migration to original retail metadata identities. */
+                    if(career_has_win(&career,trackname,circlist[selcirc],
+                                      CAREER_WORLD)) {
+                        printf("career: legacy circuit already recorded; "
+                               "retail payout skipped (no duplicate credit)\n");
+                    } else if(career_record_win(&updated,"RETAIL",
+                                authored->id,CAREER_WORLD,finish_place,nai,
+                                authored->cash_value)) {
+                        /* Stage progression remains provisional. Do not let
+                         * it auto-promote a player on unverified counters. */
+                        if(career_save(&updated,career_save_path)) {
+                            career=updated;
+                            printf("career verified retail victory: %s route=%u "
+                                   "reward=%u stage=%u world-wins=%u cash=%u\n",
+                                   authored->id,authored_track,
+                                   authored->cash_value,career.stage,
+                                   career.world_wins,career.money);
+                        } else fprintf(stderr,"career save failed: %s\n",
+                                       career_save_path);
+                    } else printf("career replay: no duplicate retail cash\n");
+                } else printf("career: race %s (route=%u stage=%u) not eligible "
+                              "for retail reward (%s); no payout\n",
+                              circlist[selcirc],(unsigned)authored_track,
+                              career.stage,
+                              match==CAREER_EVENT_AMBIGUOUS?"ambiguous ID":
+                              match==CAREER_EVENT_MATCHED?
+                              "retail unlock/opponent requirements not met":
+                              "no original event match");
             }
         }
 
