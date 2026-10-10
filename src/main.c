@@ -42,6 +42,7 @@
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
 #include "ug2_career_binding.h" /* original event metadata and race matching */
+#include "ug2_career_balance_mod.h" /* optional user-authored payout overlay */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -1955,6 +1956,7 @@ int main(int argc, char **argv) {
          --circuit PATH   circuit Paths .bin under TRACKS/ (default ROUTESL4RF/Paths4602.bin)
          --career-save P  profile file; requires original GLOBAL/GlobalB.lzc
          --career-race ID optional exact original event ID (example STAGE_1_CIRCUIT_1)
+         --career-balance P user-authored CSV payout changes; retail GlobalB remains intact
          --shot out.png   render one frame and exit
          --resolution WxH window/render size (default 1920x1080; also used by audits)
          --carinfo CAR    dump CAR's part list + texture catalog and exit (GL-free)
@@ -2089,6 +2091,7 @@ int main(int argc, char **argv) {
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
     const char *career_race_id = NULL; /* exact original event ID, optional */
+    const char *career_balance_path = NULL; /* user mod; never overwrites GlobalB */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2144,6 +2147,14 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-balance")) {
+            if (i+1>=argc || !argv[i+1][0] ||
+                (argv[i+1][0]=='-' && argv[i+1][1]=='-')) {
+                fprintf(stderr,"--career-balance requires a local CSV path\n");
+                return 2;
+            }
+            career_balance_path=argv[++i];
         }
         else if (!strcmp(argv[i], "--career-race")) {
             if (i+1>=argc || !argv[i+1][0] || strlen(argv[i+1])>=CAREER_SOURCE_NAME ||
@@ -5926,6 +5937,16 @@ int main(int argc, char **argv) {
         if(retail_catalog && ug2_career_load_file(globalfile,retail_catalog)){
             printf("retail career: %u original race IDs from %u sections\n",
                    retail_catalog->unique_races,retail_catalog->career_sections);
+            if(career_balance_path) {
+                int adjusted=ug2_career_apply_balance_mod(retail_catalog,
+                                                          career_balance_path);
+                if(adjusted>0)
+                    printf("retail career mod: %d payout overrides applied "
+                           "(original GlobalB unchanged)\n",adjusted);
+                else
+                    fprintf(stderr,"retail career mod rejected; original "
+                                   "rewards retained\n");
+            }
             /* WEvent.id is the same authored PathsNNNN track ID as the
              * original GCareerRace track_ids[]. Label only unique current
              * stage matches, not generic guesses or free-roam fake prizes. */
