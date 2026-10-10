@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <limits.h>
+#include <stdio.h>
 
 unsigned ug2_route_from_path(const char *path) {
     if(!path)return 0;
@@ -35,18 +36,26 @@ static int original_circuit_supported(const CareerSourceRace *r,
                                        unsigned stage,unsigned route,
                                        unsigned laps,unsigned opponents) {
     if(!r || r->stage!=stage || r->icon_type!=3 ||
+       r->behavior!=0 || r->is_hidden!=0 ||
        r->num_stages!=1 || r->track_ids[0]!=route ||
        (laps && r->laps[0]!=laps) ||
        (opponents && r->opponents!=opponents) ||
        !r->opponents || !r->laps[0] || r->laps[0]>16 ||
        !r->cash_value ||
        r->cash_value>1000000u) return 0;
-    /* Until we have other original game-mode implementations, award only
-     * regular 0x3414c circuit routes. Drift/drag/street/URL/sponsor cannot
-     * be made equivalent to circuit AI by renaming an event. */
-    return strstr(r->id,"_CIRCUIT_")!=NULL &&
-           strstr(r->id,"_SPON_")==NULL &&
-           strstr(r->id,"_URL_")==NULL;
+    /* Accept only plain, non-hidden regular circuits with a canonical
+     * retail identifier. Hidden events, sponsors, SUV and other types
+     * require separate unlock checks and dedicated gameplay systems.
+     * Passing --career-race NEVER bypasses those gates. */
+    char prefix[32];
+    int n=stage==1?snprintf(prefix,sizeof prefix,"STAGE_1_CIRCUIT_")
+                  :snprintf(prefix,sizeof prefix,"S%u_CIRCUIT_",stage);
+    if(n<=0 || (size_t)n>=sizeof prefix ||
+       strncmp(r->id,prefix,(size_t)n)!=0) return 0;
+    const char *p=r->id+n;
+    if(!*p) return 0;
+    for(;*p;p++) if(*p<'0' || *p>'9') return 0;
+    return 1;
 }
 UG2BindResult ug2_career_resolve_circuit(
     const UG2CareerIndex *cat,unsigned stage,unsigned route,
