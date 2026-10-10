@@ -68,6 +68,7 @@ jobs:
           make world-instance-test
           make world-resident-test
           make career-test
+          make career-garage-test
           make car-material-test
       - name: GL-backed texture cache regression without game assets
         env:
