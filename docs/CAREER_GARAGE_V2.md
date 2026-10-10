@@ -8,7 +8,8 @@ so a purchase debits money and adds ownership in **one save transaction**. It
 does not touch retail NFSU2 save files or distribute EA assets.
 
 - `career_garage_claim_starter(profile, "FOCUS")`: grants exactly one starter
-  to an empty stage-1 profile after the *caller* verifies dealer eligibility.
+  to an empty profile after the *caller* verifies dealer eligibility. This
+  also supports migrated v1 profiles saved at a later career stage.
   No specific starter is auto-assigned; "HUMMER" remains the old technical
   launcher default and is **not** considered a valid retail starter.
 - `career_garage_purchase_car(profile, model, price)`: requires an existing
