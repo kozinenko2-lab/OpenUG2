@@ -63,3 +63,40 @@ int ug2_career_bind_circuit(const UG2CareerIndex *catalog,
     *out=next;
     return 1;
 }
+
+int ug2_career_map_lookup(const UG2CareerIndex *catalog,
+                          const char *requested_id, uint16_t map_event_id,
+                          unsigned stage, UG2CareerBinding *out) {
+    if(!catalog || !out || !map_event_id || stage<1 ||
+       stage>CAREER_MAX_STAGE || catalog->unique_races>UG2_CAREER_MAX_RACES)
+        return 0;
+    int found=-1, chosen_stage=0;
+    for(uint32_t i=0;i<catalog->unique_races;i++){
+        const CareerSourceRace *r=catalog->race+i;
+        if(r->stage!=stage || !r->cash_value ||
+           (requested_id && strcmp(r->id,requested_id)!=0)) continue;
+        int matched=-1;
+        /* URL and special event scripts can have multiple authored routes.
+         * Every candidate must come from a real TrackID_StageX field. */
+        for(unsigned j=0;j<r->num_stages && j<4;j++)
+            if(r->track_ids[j]==map_event_id && r->laps[j]>0){
+                if(matched>=0)return 0; /* one ambiguous record */
+                matched=(int)j;
+            }
+        if(matched<0)continue;
+        if(found>=0)return 0; /* shared route ID: explicit race name required */
+        found=(int)i;chosen_stage=matched;
+    }
+    if(found<0)return 0;
+    const CareerSourceRace *r=catalog->race+found;
+    UG2CareerBinding next={0};
+    memcpy(next.race_id,r->id,sizeof next.race_id);
+    memcpy(next.trigger,r->trigger,sizeof next.trigger);
+    next.route_id=map_event_id;
+    next.laps=r->laps[chosen_stage];
+    next.opponents=r->opponents;
+    next.payout=r->cash_value;
+    kind_from_name(r->id,&next.kind);
+    *out=next;
+    return 1;
+}
