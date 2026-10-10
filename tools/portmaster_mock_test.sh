@@ -49,6 +49,17 @@ grep -Fq "EXEC_PATH:$root/ports/openug2/nfsu2.aarch64" "$log"
 test -d "$root/ports/openug2/saves"
 test -d "$root/ports/openug2/conf"
 grep -Fq "libs.aarch64" "$log"
+# Optional user-authored sidecar must be passed only when it exists.
+mkdir -p "$root/ports/openug2/mods"
+printf 'race_id,cash\nSTAGE_1_CIRCUIT_1,350\n' > \
+    "$root/ports/openug2/mods/career_rewards.csv"
+sed -i 's/CAREER_RACE=""/CAREER_RACE="STAGE_1_CIRCUIT_1"/' \
+    "$root/ports/OpenUG2.sh"
+PORTMASTER_CONTROL_DIR="$root/pm" bash "$root/ports/OpenUG2.sh"
+grep -Fq 'ARG:--career-balance' "$log"
+grep -Fq 'ARG:--career-race' "$log"
+grep -Fq 'ARG:STAGE_1_CIRCUIT_1' "$log"
+grep -Fq 'ARG:'"$root"'/ports/openug2/mods/career_rewards.csv' "$log"
 # Missing assets must reject launch without running the game.
 rm -r "$root/ports/openug2/game/CARS"
 set +e
