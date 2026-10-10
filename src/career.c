@@ -86,6 +86,17 @@ int career_record_win(Career *c, const char *track, const char *event,
     c->money = UINT32_MAX - c->money < payout ? UINT32_MAX : c->money+payout;
     return 1;
 }
+int career_record_original_prologue(Career *c, const char *id) {
+    if(!c || c->stage!=1 || !id || c->seen_count>=CAREER_MAX_EVENTS ||
+       (strcmp(id,"DDAY_EVENT_A") && strcmp(id,"DDAY_EVENT_B")))
+        return 0;
+    uint64_t key=career_key("UG2_ORIGINAL",id,(unsigned)CAREER_WORLD);
+    if(!key || has_key(c,key))return 0;
+    c->wins[c->seen_count++].key=key;
+    /* These are stage-0 scripted events. They cannot count as ordinary
+     * world-race victories and cannot award cash or advance stages. */
+    return 1;
+}
 int career_record_cover(Career *c, const char *location, unsigned stars) {
     if (!c || !location || !*location || stars > 10 ||
         c->stage < 1 || c->stage > 5 || c->seen_count >= CAREER_MAX_EVENTS)
