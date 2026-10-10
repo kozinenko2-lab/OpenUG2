@@ -5984,8 +5984,8 @@ int main(int argc, char **argv) {
        selcirc>=0 && selcirc<ncirc) {
         const unsigned route=ug2_route_from_path(circlist[selcirc]);
         const CareerSourceRace *selected=NULL;
-        if(ug2_career_resolve_circuit(retail_career,career.stage,route,
-                                      career_race_id,0,0,&selected)
+        if(ug2_career_resolve_circuit_for_profile(retail_career,&career,
+                                      career.stage,route,career_race_id,0,0,&selected)
            ==UG2_BIND_MATCH && selected && selected->opponents<=nai) {
             nai=selected->opponents;
             LAP_TARGET=selected->laps[0];
@@ -6459,9 +6459,9 @@ int main(int argc, char **argv) {
                         if(ncirc>0 && selcirc>=0 && selcirc<ncirc && retail_career) {
                             const unsigned route=ug2_route_from_path(circlist[selcirc]);
                             const CareerSourceRace *selected=NULL;
-                            UG2BindResult match=ug2_career_resolve_circuit(
-                                retail_career,career.stage,route,career_race_id,
-                                0,0,&selected);
+                            UG2BindResult match=ug2_career_resolve_circuit_for_profile(
+                                retail_career,&career,career.stage,route,
+                                career_race_id,0,0,&selected);
                             if(match==UG2_BIND_MATCH && selected &&
                                selected->opponents<=nai) {
                                 nai=selected->opponents;
