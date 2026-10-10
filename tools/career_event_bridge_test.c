@@ -35,6 +35,7 @@ int main(void){
     assert(!ug2_career_unique_route(c,3,4201,&s)); /* two rewards: ambiguous */
     assert(!ug2_career_select(c,"S4_URL_3",4,&s));   /* multi-stage URL blocked */
     unsigned money=profile.money;
+    s.kind=CAREER_URL; /* forged event kind must fail, even on the right route */
     assert(!ug2_career_award(&profile,&s,4001,1,1,1,3));
     assert(profile.money==money && profile.seen_count==0);
     s=last;
