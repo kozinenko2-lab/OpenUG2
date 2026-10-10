@@ -41,6 +41,8 @@
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
+#include "ug2_career_file.h"
+#include "ug2_career_mod.h"
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2085,6 +2087,7 @@ int main(int argc, char **argv) {
     const char *circuit = "ROUTESL4RF/Paths4602.bin"; int explicit_circuit = 0;
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
+    const char *career_mod_path = NULL; /* optional catalog overlay, no archive writes */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2140,6 +2143,13 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-mod")) {
+            if(i+1>=argc || !argv[i+1][0] || argv[i+1][0]=='-') {
+                fprintf(stderr,"--career-mod needs a local mods/career.cfg path\n");
+                return 2;
+            }
+            career_mod_path=argv[++i];
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -5895,6 +5905,29 @@ int main(int argc, char **argv) {
     int race_state = 1;
 #endif
     int racetimer = 0, finish_place = 0;
+    /* Mod metadata stays separate from EA assets. Do not credit real
+     * wins with catalog payouts until race event identities are verified. */
+    if(career_mod_path) {
+        char gbpath[1024];
+        int plen=snprintf(gbpath,sizeof gbpath,"%s/GLOBAL/GlobalB.lzc",dataroot);
+        if(plen<0 || plen>=(int)sizeof gbpath) {
+            fprintf(stderr,"career mod: retail GlobalB path too long\n");
+        } else {
+            UG2CareerIndex *catalog=(UG2CareerIndex *)malloc(sizeof *catalog);
+            if(catalog) {
+                unsigned changed=0;
+                if(ug2_career_load_file(gbpath,catalog) &&
+                   ug2_career_apply_mods_file(catalog,career_mod_path,&changed))
+                    printf("career mod: %u reward overrides loaded against %u "
+                           "unique race IDs (finish integration pending)\n",
+                           changed,catalog->unique_races);
+                else
+                    fprintf(stderr,"career mod: invalid config or original GlobalB; "
+                                   "no overrides activated\n");
+                free(catalog);
+            } else fprintf(stderr,"career mod: out of memory\n");
+        }
+    }
     Career career;
     career_init(&career);
     if (career_save_path) {
