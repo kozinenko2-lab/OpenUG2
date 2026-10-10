@@ -37,14 +37,15 @@ int main(void) {
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,4,&found)==UG2_BIND_NO_MATCH);
     assert(ug2_career_resolve_circuit(c,3,4082,NULL,2,3,&found)==UG2_BIND_NO_MATCH);
     /* One game route may be shared by several races, with different payouts. */
-    add(c,"S3_H_CIRCUIT_11",4081,3,2,3,3)->cash_value=1200;
+    add(c,"S3_CIRCUIT_11",4081,3,2,3,3)->cash_value=1200;
     assert(ug2_career_map_count(c,3,4081)==2);
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,3,&found)==UG2_BIND_AMBIGUOUS && !found);
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,0,0,&found)==UG2_BIND_AMBIGUOUS);
     assert(ug2_career_resolve_circuit(c,3,4081,"S3_CIRCUIT_10",2,3,&found)==UG2_BIND_MATCH);
     assert(found && found->cash_value==350);
-    assert(ug2_career_resolve_circuit(c,3,4081,"S3_CIRCUIT_11",2,3,&found)==UG2_BIND_NO_MATCH);
-    assert(ug2_career_resolve_circuit(c,3,4081,"S3_H_CIRCUIT_11",2,3,&found)==UG2_BIND_MATCH);
+    assert(ug2_career_resolve_circuit(c,3,4081,"S3_CIRCUIT_11",2,3,&found)==UG2_BIND_MATCH);
+    assert(found && found->cash_value==1200);
+    assert(ug2_career_resolve_circuit(c,3,4081,"S3_H_CIRCUIT_11",2,3,&found)==UG2_BIND_NO_MATCH);
     /* URL, sponsored race and drift are discoverable on the map but cannot
      * be paid as if they were the legacy circuit game mode. */
     /* Retail stage 1 opens a 3-lap, 3-opponent circuit on Paths4013.bin.
@@ -59,6 +60,14 @@ int main(void) {
     add(c,"S3_SPON_CIRCUIT_12",4083,3,2,3,1);
     add(c,"S3_URL_12",4711,3,4,5,2);
     add(c,"S3_DRIFT_12",4312,3,3,0,3);
+    /* Hidden, sponsor and wrong behavior cannot be transformed into a
+     * normal paid race by supplying the exact career ID. */
+    add(c,"S3_H_CIRCUIT_11",4082,3,2,3,3)->is_hidden=1;
+    add(c,"S3_CIRCUIT_12",4084,3,2,3,3)->behavior=1;
+    add(c,"S3_CIRCUIT_13",4085,3,2,3,3)->is_hidden=1;
+    assert(ug2_career_resolve_circuit(c,3,4082,"S3_H_CIRCUIT_11",2,3,&found)==UG2_BIND_NO_MATCH);
+    assert(ug2_career_resolve_circuit(c,3,4084,"S3_CIRCUIT_12",2,3,&found)==UG2_BIND_NO_MATCH);
+    assert(ug2_career_resolve_circuit(c,3,4085,"S3_CIRCUIT_13",2,3,&found)==UG2_BIND_NO_MATCH);
     assert(ug2_career_map_count(c,3,4083)==1);
     assert(ug2_career_resolve_circuit(c,3,4083,NULL,2,3,&found)==UG2_BIND_NO_MATCH);
     assert(ug2_career_resolve_circuit(c,3,4711,NULL,4,5,&found)==UG2_BIND_NO_MATCH);
