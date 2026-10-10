@@ -9,6 +9,15 @@ typedef enum {
     UG2_BIND_MATCH=1,
     UG2_BIND_AMBIGUOUS=-1
 } UG2BindResult;
+/* Independently reimplemented NFS Binary Hash (GlobalLib Utils/Bin.cs,
+ * MIT), used by SPECIFIC_RACE_WON predecessor references. */
+uint32_t ug2_career_bin_hash(const char *ascii_id);
+/* Resolve hashed predecessor to ONE immutable original race record.
+ * A missing/ambiguous name is unknown, not unlocked. This does NOT mark
+ * the prerequisite complete; caller needs a verified saved win. */
+const CareerSourceRace *ug2_career_prerequisite(
+    const UG2CareerIndex *cat,const CareerSourceRace *event);
+
 /* Returns 0 on an invalid or missing Paths####.bin suffix. */
 unsigned ug2_route_from_path(const char *path);
 /* Count ALL known original events on this stage/route, including events that

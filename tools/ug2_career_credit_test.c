@@ -16,6 +16,8 @@ static CareerSourceRace *add(UG2CareerIndex *cat,const char *name,
     snprintf(r->id,sizeof r->id,"%s",name);
     r->stage=(uint8_t)stage;
     r->cash_value=prize;
+    r->unlock_method=1; /* AT_STAGE_START; stage-specific */
+    r->required_specific_url=(uint8_t)(stage-1);
     r->num_stages=1;
     r->track_ids[0]=(uint16_t)route;
     r->laps[0]=2;
@@ -49,6 +51,15 @@ int main(void) {
            ==UG2_CREDIT_NOT_ELIGIBLE); /* no opponents */
     assert(ug2_career_credit_circuit(&c,cat,4081,a->id,1,3,1,path,&event)
            ==UG2_CREDIT_NOT_ELIGIBLE); /* different laps */
+    a->unlock_method=3; /* race-count gate not yet implemented */
+    assert(ug2_career_credit_circuit(&c,cat,4081,a->id,2,3,1,path,&event)
+           ==UG2_CREDIT_NOT_ELIGIBLE);
+    a->unlock_method=1;
+    a->required_specific_url=3; /* wrong stage-start marker */
+    assert(ug2_career_credit_circuit(&c,cat,4081,a->id,2,3,1,path,&event)
+           ==UG2_CREDIT_NOT_ELIGIBLE);
+    a->required_specific_url=2;
+
     assert(ug2_career_credit_circuit(&c,cat,4082,a->id,2,3,1,path,&event)
            ==UG2_CREDIT_NOT_ELIGIBLE); /* wrong physical route */
     assert(ug2_career_credit_circuit(&c,cat,4084,hidden->id,2,3,1,path,&event)
