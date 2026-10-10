@@ -26,6 +26,8 @@ int main(void) {
     add(c,"S3_CIRCUIT_10",4081,3,2,3,3);
     assert(ug2_career_map_count(c,3,4081)==1);
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,3,&found)==UG2_BIND_MATCH);
+    assert(ug2_career_resolve_circuit(c,3,4081,NULL,0,0,&found)==UG2_BIND_MATCH);
+    assert(found && found->laps[0]==2 && found->opponents==3);
     assert(found && found->cash_value==350);
     assert(ug2_career_resolve_circuit(c,2,4081,NULL,2,3,&found)==UG2_BIND_NO_MATCH && !found);
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,1,3,&found)==UG2_BIND_NO_MATCH);
@@ -35,6 +37,7 @@ int main(void) {
     add(c,"S3_H_CIRCUIT_11",4081,3,2,3,3)->cash_value=1200;
     assert(ug2_career_map_count(c,3,4081)==2);
     assert(ug2_career_resolve_circuit(c,3,4081,NULL,2,3,&found)==UG2_BIND_AMBIGUOUS && !found);
+    assert(ug2_career_resolve_circuit(c,3,4081,NULL,0,0,&found)==UG2_BIND_AMBIGUOUS);
     assert(ug2_career_resolve_circuit(c,3,4081,"S3_CIRCUIT_10",2,3,&found)==UG2_BIND_MATCH);
     assert(found && found->cash_value==350);
     assert(ug2_career_resolve_circuit(c,3,4081,"S3_CIRCUIT_11",2,3,&found)==UG2_BIND_NO_MATCH);
