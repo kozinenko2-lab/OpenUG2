@@ -18,6 +18,7 @@ typedef struct {
     uint8_t stage;            /* raw BelongsToStage, 0..5 */
     uint8_t opponents;
     uint8_t icon_type;        /* raw eEventIconType; mapping not verified */
+    uint8_t event_behavior;   /* verified GlobalLib 0 circuit, 1 sprint, 2 StreetX, 3 open world, 4 drag, 5 drift */
     uint8_t unlock_method;    /* raw eUnlockCondition; mapping not verified */
     uint8_t required_races;
     uint8_t required_urls;
