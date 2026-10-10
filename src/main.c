@@ -41,6 +41,7 @@
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
+#include "career_event_map.h" /* verified PC GlobalB track/stage/payout link */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2085,6 +2086,7 @@ int main(int argc, char **argv) {
     const char *circuit = "ROUTESL4RF/Paths4602.bin"; int explicit_circuit = 0;
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
+    const char *want_retail_race_id = NULL; /* disambiguates an original event */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2140,6 +2142,16 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_save_path = argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-race")) {
+            if(i+1>=argc || !argv[i+1][0] ||
+               strlen(argv[i+1])>=CAREER_SOURCE_NAME ||
+               strspn(argv[i+1],"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")!=
+               strlen(argv[i+1])) {
+                fprintf(stderr,"--career-race requires a canonical retail race ID\n");
+                return 2;
+            }
+            want_retail_race_id=argv[++i];
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -2434,6 +2446,10 @@ int main(int argc, char **argv) {
             world2_heading_set = 1;
         }
         else dataroot = argv[i];
+    }
+    if(want_retail_race_id && !career_save_path) {
+        fprintf(stderr,"--career-race also requires --career-save\n");
+        return 2;
     }
     if (chase_d > 0.0f) { g_dbg.chase_distance = chase_d; g_dbg.chase_height = chase_h; }
     /* Closed-circuit loading still uses the verified route/world path. Keep an
@@ -5896,6 +5912,7 @@ int main(int argc, char **argv) {
 #endif
     int racetimer = 0, finish_place = 0;
     Career career;
+    UG2CareerIndex *retail_catalog=NULL;
     career_init(&career);
     if (career_save_path) {
         int loaded = career_load(&career, career_save_path);
@@ -5905,6 +5922,40 @@ int main(int argc, char **argv) {
                career.stage, career.money, career.total_wins,
                career.world_wins, career.sponsor_wins,
                career.url_wins, career.dvd_covers);
+        /* Career state is independent from the game's original asset file.
+         * Only an existing local PC GLOBAL/GlobalB.lzc can supply rewards.
+         * Never hardcode a proprietary event catalog into the executable. */
+        char global_career_path[1024];
+        snprintf(global_career_path,sizeof global_career_path,
+                 "%s/GLOBAL/GlobalB.lzc",dataroot);
+        retail_catalog=(UG2CareerIndex *)malloc(sizeof *retail_catalog);
+        if(!retail_catalog ||
+           !ug2_career_load_file(global_career_path,retail_catalog)) {
+            fprintf(stderr,"career: original GlobalB.lzc unavailable or invalid; "
+                           "all retail payouts disabled\n");
+            free(retail_catalog);retail_catalog=NULL;
+        } else {
+            printf("career: validated original GlobalB.lzc: %u unique races, "
+                   "%u sections, %u sponsors\n",
+                   retail_catalog->unique_races,retail_catalog->career_sections,
+                   retail_catalog->sponsor_records);
+            if(world.city.race.active && world.city.race.ev>=0 &&
+               world.city.race.ev<world.city.nev) {
+                const WEvent *event=&world.city.ev[world.city.race.ev];
+                const CareerSourceRace *original=NULL;
+                CareerEventMatch state=career_event_resolve(retail_catalog,
+                    (uint16_t)event->id,career.stage,event->circuit?0u:1u,
+                    want_retail_race_id,&original);
+                if(state==CAREER_EVENT_MATCHED)
+                    printf("career map: route %d -> %s (stage %u, cash %u); "
+                           "scripted event rivals still unavailable\n",
+                           event->id,original->id,original->stage,original->cash_value);
+                else printf("career map: route %d stage %u: %s\n",event->id,
+                            career.stage,state==CAREER_EVENT_AMBIGUOUS?
+                            "ambiguous retail events (specify --career-race)":
+                            "no matching supported retail event");
+            }
+        }
     }
 #ifdef OPENUG2_MENU
     Fe frontend;
