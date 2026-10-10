@@ -81,6 +81,10 @@ jobs:
           make career-garage-test
           make career-source-test
           make ug2-career-file-test
+          make ug2-trigger-probe-test
+          make ug2-trigger-probe
+          file build/ug2_trigger_probe
+          readelf -h build/ug2_trigger_probe | grep -q AArch64
           make ug2-career-binding-test
           make ug2-career-credit-test
           make ug2-prologue-test
@@ -96,5 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: openug2-linux-arm64-gles2-ci-only
-          path: nfsu2
+          path: |
+            nfsu2
+            build/ug2_trigger_probe
           retention-days: 7
