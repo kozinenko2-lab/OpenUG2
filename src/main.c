@@ -41,6 +41,7 @@
 #include "world_mesh.h"   /* F3 prelight/normal/wireframe debug pipeline */
 #include "hud.h"          /* stage 8: opt-in in-game player HUD (--hud) */
 #include "career.h"       /* persistent prototype career state */
+#include "career_retail_circuit.h" /* verified original race ID / route binding */
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -5897,6 +5898,31 @@ int main(int argc, char **argv) {
     int racetimer = 0, finish_place = 0;
     Career career;
     career_init(&career);
+    /* Parse the user's OWN GlobalB.lzc once, never embedding retail assets.
+     * An absent / incompatible catalog means NO awarded career wins. */
+    UG2CareerIndex *retail_catalog = NULL;
+    if (career_save_path) {
+        retail_catalog=(UG2CareerIndex *)calloc(1,sizeof *retail_catalog);
+        char career_globalb[1024];
+        snprintf(career_globalb,sizeof career_globalb,
+                 "%s/GLOBAL/GlobalB.lzc",dataroot);
+        if(!retail_catalog ||
+           !ug2_career_load_file(career_globalb,retail_catalog)) {
+            snprintf(career_globalb,sizeof career_globalb,
+                     "%s/GLOBAL/GLOBALB.BUN",dataroot);
+            if(!retail_catalog ||
+               !ug2_career_load_file(career_globalb,retail_catalog)) {
+                free(retail_catalog);
+                retail_catalog=NULL;
+                fprintf(stderr,"career: no validated Underground 2 GlobalB; "
+                               "retail rewards disabled (no 500-credit fallback)\n");
+            }
+        }
+        if(retail_catalog)
+            printf("career: original UG2 catalog ready (%u unique races, "
+                   "%u sections)\n",retail_catalog->unique_races,
+                   retail_catalog->career_sections);
+    }
     if (career_save_path) {
         int loaded = career_load(&career, career_save_path);
         printf("career profile: %s stage=%u cash=%u unique-wins=%u "
@@ -8028,27 +8054,33 @@ int main(int argc, char **argv) {
                 if (ais[k].lap*aipath.n + ais[k].prevrel > pp) ahead++;
             finish_place = ahead + 1;
             race_state = 2;
-            /* Only a confirmed FIRST PLACE over actual circuit opponents may
-             * affect the career. Event-free roam and solo scripted-event
-             * gate completion are NOT valid career wins. Event IDs and retail
-             * payout tables are not verified yet. The prototype 500-unit award
-             * is deliberately limited to the existing completed AI circuit. */
-            if (career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
-                selcirc>=0 && selcirc<ncirc && aipath.n>1) {
-                Career updated = career;
-                if (career_record_win(&updated, trackname, circlist[selcirc],
-                                      CAREER_WORLD, finish_place, nai, 500)) {
-                    int promoted = career_advance_stage(&updated);
-                    if (career_save(&updated,career_save_path)) {
-                        career = updated;
-                        printf("career verified circuit victory: %s stage=%u "
-                               "new-world-wins=%u cash=%u%s\n",
-                               circlist[selcirc], career.stage,
-                               career.world_wins, career.money,
-                               promoted ? " [STAGE UNLOCKED]" : "");
+            /* Only a verified first-place AI circuit can earn authentic
+             * money. The original GlobalB catalogue ties PathsNNNN.bin to
+             * stage-specific GCareerRace.TrackID. If several authored events
+             * share it (sponsor/URL/etc.), the match is AMBIGUOUS and we
+             * deliberately withhold rewards rather than credit wrong race. */
+            if(career_save_path && retail_catalog && finish_place==1 &&
+               nai>0 && ncirc>0 && selcirc>=0 && selcirc<ncirc &&
+               aipath.n>1) {
+                Career updated=career;
+                CareerRetailCircuit source;
+                if(career_retail_circuit_win(&updated,retail_catalog,
+                        circlist[selcirc],finish_place,nai,&source)) {
+                    /* Existing provisional stage requirements remain
+                     * experimental; do not silently claim retail progression. */
+                    if(career_save(&updated,career_save_path)) {
+                        career=updated;
+                        printf("career: original race %s (route %u) won; "
+                               "retail prize %u, cash=%u; stage=%u\n",
+                               source.race->id,source.route_id,
+                               source.race->cash_value,career.money,career.stage);
                     } else fprintf(stderr,"career save failed: %s\n",
                                    career_save_path);
-                } else printf("career replay: already counted, no duplicate cash\n");
+                } else {
+                    printf("career: route %s not a unique eligible stage-%u "
+                           "original circuit or already won; no credits\n",
+                           circlist[selcirc],career.stage);
+                }
             }
         }
 
@@ -9730,6 +9762,19 @@ int main(int argc, char **argv) {
             glUniform3f(uColor, 0.45f, 0.7f, 1.0f);
             draw_text(&quad, uMVP, trackname, -text_width(trackname,0.012f)/2, 0.23f, 0.012f, 0.02f);
             if (career_save_path) {
+                CareerRetailCircuit bound;
+                if(retail_catalog && ncirc>0 &&
+                   selcirc>=0 && selcirc<ncirc &&
+                   career_retail_circuit_lookup(retail_catalog,career.stage,
+                                                circlist[selcirc],&bound)) {
+                    char event_label[140];
+                    snprintf(event_label,sizeof event_label,"ORIGINAL %s   $%u",
+                             bound.race->id,bound.race->cash_value);
+                    glUniform3f(uColor,0.95f,0.80f,0.35f);
+                    draw_text(&quad,uMVP,event_label,
+                              -text_width(event_label,0.010f)/2,0.18f,
+                              0.010f,0.018f);
+                }
                 CareerRequirements req = career_requirements(career.stage);
                 char progress[128];
                 snprintf(progress,sizeof progress,
@@ -10887,6 +10932,7 @@ int main(int argc, char **argv) {
         final_status=1;
     }
     world_city_free(&world.city);
+    free(retail_catalog);
     free(ai_drive_path.xy);
     if (dbgprog) glDeleteProgram(dbgprog);
     if (adev) SDL_CloseAudioDevice(adev);
