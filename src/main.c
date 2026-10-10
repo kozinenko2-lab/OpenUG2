@@ -43,6 +43,7 @@
 #include "career.h"       /* persistent prototype career state */
 #include "ug2_career_file.h"
 #include "ug2_career_binding.h"
+#include "ug2_career_mod.h"
 #include "world_capture_policy.h"
 #include "world_scenery.h"
 #include "ground_motion.h"
@@ -2088,6 +2089,7 @@ int main(int argc, char **argv) {
     int want_event_id = 0;   /* --event <id>: boot straight into a race event */
     const char *career_save_path = NULL; /* explicit opt-in; never edits retail saves */
     const char *career_race_id = NULL; /* exact original GlobalB race ID when route is shared */
+    const char *career_mod_file = NULL; /* optional text overlay; GlobalB stays unchanged */
     int shotframes = 40;     /* --frames N: how long --shot drives before the grab */
     int shotframes_set = 0;
     int want_laps = 2;       /* --laps N: race distance for --event */
@@ -2150,6 +2152,13 @@ int main(int argc, char **argv) {
                 return 2;
             }
             career_race_id=argv[++i];
+        }
+        else if (!strcmp(argv[i], "--career-mod")) {
+            if(i+1>=argc || !argv[i+1][0] || !strncmp(argv[i+1],"--",2)) {
+                fprintf(stderr,"--career-mod requires mod text file path\n");
+                return 2;
+            }
+            career_mod_file=argv[++i];
         }
         else if (!strcmp(argv[i], "--car")     && i+1 < argc) carname   = argv[++i];
         else if (!strcmp(argv[i], "--event")   && i+1 < argc) want_event_id = atoi(argv[++i]);
@@ -2445,8 +2454,8 @@ int main(int argc, char **argv) {
         }
         else dataroot = argv[i];
     }
-    if(career_race_id && !career_save_path) {
-        fprintf(stderr,"--career-race requires --career-save\n");
+    if((career_race_id || career_mod_file) && !career_save_path) {
+        fprintf(stderr,"--career-race and --career-mod require --career-save\n");
         return 2;
     }
     if (chase_d > 0.0f) { g_dbg.chase_distance = chase_d; g_dbg.chase_height = chase_h; }
@@ -5939,11 +5948,21 @@ int main(int argc, char **argv) {
                                "original-event payouts disabled\n");
                 free(retail_career);retail_career=NULL;
             } else {
+                if(career_mod_file) {
+                    unsigned changed=0;
+                    if(ug2_career_mod_apply_file(career_mod_file,retail_career,
+                                                  &changed))
+                        printf("career mod overlay: %u original race payouts "
+                               "overridden in memory\n",changed);
+                    else fprintf(stderr,"career mod invalid or missing: %s; "
+                                        "using unmodified original payouts\n",
+                                        career_mod_file);
+                }
                 printf("career retail catalog: %u unique races, %u sections; "
                        "career stage %u\n",retail_career->unique_races,
                        retail_career->career_sections,career.stage);
-                /* Authored WEvent IDs come from the matching ROUTES*/ 
-                /* Paths####.bin data, not an invented race-to-map table.
+                /* WEvent IDs come from shipped ROUTES/Paths####.bin metadata,
+                 * not an invented race-to-map table.
                  * Multiple career races may use the same route. */
                 for(int i=0;i<world.city.nev;i++) {
                     const unsigned route=(unsigned)world.city.ev[i].id;
@@ -10909,6 +10928,7 @@ int main(int argc, char **argv) {
 #ifdef DEBUG_UI
     dbgui_shutdown();
 #endif
+    free(retail_career); retail_career=NULL;
     hud_free(&hud);        /* releases its textures; safe when never created */
     free_scene_gpu(wheelgm, nwheelgm);
     if(opponent_wheelmesh.vbo) {
