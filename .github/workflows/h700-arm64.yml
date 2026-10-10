@@ -53,6 +53,13 @@ jobs:
           career_code=$?
           set -e
           test "$career_code" -eq 2 || { cat /tmp/missing-career-path.log; exit 1; }
+          for args in "--career-race S3_CIRCUIT_10" "--career-mod missing.cfg"; do
+            set +e
+            ./nfsu2 /tmp/no-nfsu2-data $args > /tmp/missing-career-opt.log 2>&1
+            code=$?
+            set -e
+            test "$code" -eq 2 || { cat /tmp/missing-career-opt.log; exit 1; }
+          done
           for bad in abc -1 1025 999999999999; do
             set +e
             ./nfsu2 /tmp/no-nfsu2-data --texture-cache-mb "$bad" > /tmp/invalid-cache.log 2>&1
@@ -74,6 +81,8 @@ jobs:
           make career-garage-test
           make career-source-test
           make ug2-career-file-test
+          make ug2-career-binding-test
+          make ug2-career-mod-test
           make ug2-career-dump
           make car-material-test
       - name: GL-backed texture cache regression without game assets

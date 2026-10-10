@@ -49,6 +49,14 @@ grep -Fq "EXEC_PATH:$root/ports/openug2/nfsu2.aarch64" "$log"
 test -d "$root/ports/openug2/saves"
 test -d "$root/ports/openug2/conf"
 grep -Fq "libs.aarch64" "$log"
+# A user-authored mod overlay is detected, passed once and never copied to
+# the repo. Plain launcher without the file must not set --career-mod.
+! grep -Fq 'ARG:--career-mod' "$log"
+mkdir -p "$root/ports/openug2/mods"
+printf '# test-only overlay\\n' > "$root/ports/openug2/mods/career_rewards.cfg"
+PORTMASTER_CONTROL_DIR="$root/pm" bash "$root/ports/OpenUG2.sh"
+grep -Fq 'ARG:--career-mod' "$log"
+grep -Fq "ARG:$root/ports/openug2/mods/career_rewards.cfg" "$log"
 # Missing assets must reject launch without running the game.
 rm -r "$root/ports/openug2/game/CARS"
 set +e
