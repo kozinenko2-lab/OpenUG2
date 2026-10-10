@@ -1,7 +1,12 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<game>
-  <name>OpenUG2</name>
-  <desc>Open-source experimental NFS Underground 2 engine. User-owned PC game data required. Career is not fully playable.</desc>
-  <developer>OpenUG2 contributors</developer>
-  <genre>Racing</genre>
-</game>
+<?xml version="1.0" encoding="utf-8"?>
+<gameList>
+  <game>
+    <path>./OpenUG2.sh</path>
+    <name>OpenUG2 (NFS Underground 2)</name>
+    <desc>Experimental ARM64/GLES2 native racing engine. User-owned PC game files required; career is not yet fully playable.</desc>
+    <releasedate>20261010T000000</releasedate>
+    <developer>OpenUG2 contributors</developer>
+    <publisher>Open Source</publisher>
+    <genre>Racing</genre>
+  </game>
+</gameList>
