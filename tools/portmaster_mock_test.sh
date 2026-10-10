@@ -33,7 +33,7 @@ printf 'LD_PATH:%s\n' "\${LD_LIBRARY_PATH:-}"
 printf 'ARG:%s\n' "$@"
 EOF
 chmod +x "$root/ports/openug2/nfsu2.aarch64"
-PORTMASTER_CONTROL_DIR="$root/pm" "$root/ports/OpenUG2.sh"
+PORTMASTER_CONTROL_DIR="$root/pm" bash "$root/ports/OpenUG2.sh"
 log="$root/ports/openug2/logs/OpenUG2.log"
 test -s "$log"
 grep -Fq 'MOCK_BINARY' "$log"
@@ -52,7 +52,7 @@ grep -Fq "libs.aarch64" "$log"
 # Missing assets must reject launch without running the game.
 rm -r "$root/ports/openug2/game/CARS"
 set +e
-PORTMASTER_CONTROL_DIR="$root/pm" "$root/ports/OpenUG2.sh"
+PORTMASTER_CONTROL_DIR="$root/pm" bash "$root/ports/OpenUG2.sh"
 status=$?
 set -e
 test "$status" -eq 3
