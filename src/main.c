@@ -6239,6 +6239,10 @@ int main(int argc, char **argv) {
                     case SDL_CONTROLLER_BUTTON_A:
                     case SDL_CONTROLLER_BUTTON_START:      key = SDLK_RETURN; break;
                     case SDL_CONTROLLER_BUTTON_B:          key = SDLK_f; break;
+                    /* H700/RG40XX H's additional L3/R3 switches choose the
+                     * original career event sharing this physical route. */
+                    case SDL_CONTROLLER_BUTTON_LEFTSTICK:  key = SDLK_COMMA; break;
+                    case SDL_CONTROLLER_BUTTON_RIGHTSTICK: key = SDLK_PERIOD; break;
                     default: break;
                 }
                 if (key != SDLK_UNKNOWN) {
@@ -6371,6 +6375,38 @@ int main(int argc, char **argv) {
                         /* The current district remains selected until the
                          * prepared world and event catalog both validate. */
                         pending_track = (seltrack + (k==SDLK_DOWN?1:ntrack-1)) % ntrack;
+                    } else if ((k==SDLK_COMMA || k==SDLK_PERIOD) &&
+                               retail_catalog && !e.key.repeat) {
+                        int desired_route=ncirc>0 && selcirc>=0 && selcirc<ncirc
+                            ? ug2_career_route_id(circlist[selcirc])
+                            : nsprint>0 && selsprint>=0 && selsprint<nsprint
+                            ? world.city.ev[sprintev[selsprint]].id : -1;
+                        if(desired_route>0 && desired_route<=65535) {
+                            uint32_t matching[UG2_CAREER_MAX_RACES];
+                            uint32_t available=0;
+                            int current=-1;
+                            for(uint32_t ix=0;ix<retail_catalog->unique_races;ix++){
+                                const CareerSourceRace *er=&retail_catalog->race[ix];
+                                if(er->stage!=career.stage || !er->cash_value)continue;
+                                if(ncirc && !strstr(er->id,"CIRCUIT"))continue;
+                                int match=0;
+                                for(unsigned level=0;level<er->num_stages && level<4;level++)
+                                    if(er->track_ids[level]==(uint16_t)desired_route &&
+                                       er->laps[level])match=1;
+                                if(!match)continue;
+                                if(career_race_id && !strcmp(career_race_id,er->id))
+                                    current=(int)available;
+                                matching[available++]=ix;
+                            }
+                            if(available>0) {
+                                int next=current<0?0:(int)((current+(k==SDLK_PERIOD
+                                    ?1:(int)available-1))%(int)available);
+                                career_race_id=retail_catalog->race[matching[next]].id;
+                                printf("selected original career event: %s "
+                                       "(route %d, option %d/%u)\n",
+                                       career_race_id,desired_route,next+1,available);
+                            }
+                        }
                     } else if ((k==SDLK_LEFTBRACKET || k==SDLK_RIGHTBRACKET) &&
                                !ncirc && nsprint > 1) {
                         selsprint = (selsprint + (k==SDLK_RIGHTBRACKET?1:nsprint-1)) % nsprint;
