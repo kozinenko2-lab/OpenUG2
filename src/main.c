@@ -5961,9 +5961,33 @@ int main(int argc, char **argv) {
                                         "using unmodified original payouts\n",
                                         career_mod_file);
                 }
-                printf("career retail catalog: %u unique races, %u sections; "
-                       "career stage %u\n",retail_career->unique_races,
-                       retail_career->career_sections,career.stage);
+                printf("career retail catalog: %u unique races, %u sections, "
+                       "%u shop records; career stage %u\n",
+                       retail_career->unique_races,
+                       retail_career->career_sections,
+                       retail_career->shop_records,career.stage);
+                /* Retail WorldShop identities are source-backed, but their
+                 * trigger locations/actions are not available in GlobalB.
+                 * Report both original sections without treating appearance
+                 * of a shop, route 4000 or scene name as a completion. */
+                if(career.stage==1) {
+                    for(uint32_t si=0;si<retail_career->shop_records;si++) {
+                        const UG2CareerShop *shop=&retail_career->shops[si];
+                        if(strcmp(shop->name,"CC_CAR_LOT_1") &&
+                           strcmp(shop->name,"CRIB_1"))continue;
+                        printf("career intro shop: section=%u name=%s "
+                               "type=%u stage=%u hidden=%u "
+                               "movie=%s trigger=%08x required-event=%08x "
+                               "needs-event=%u\n",
+                               (unsigned)shop->section,shop->name,
+                               (unsigned)shop->shop_type,
+                               (unsigned)shop->stage,
+                               (unsigned)shop->initially_hidden,
+                               shop->intro_movie,(unsigned)shop->trigger_key,
+                               (unsigned)shop->required_event,
+                               (unsigned)shop->unlocked_by_event);
+                    }
+                }
                 /* Informational only: both original DDAY entries share
                  * Paths4000, have zero laps/AI and need a separate scripted
                  * finish detector. Do NOT mark them complete from a route. */
