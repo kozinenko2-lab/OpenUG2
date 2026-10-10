@@ -4,6 +4,31 @@
 #include <limits.h>
 #include <stdio.h>
 
+/* UG2 binary hash, confirmed against original DDAY_EVENT_B.
+ * GlobalLib Utils/Bin.cs: start 0xffffffff, multiply by 33, append each
+ * ASCII byte, unsigned 32-bit wrap. No hash is sufficient proof of victory. */
+uint32_t ug2_career_bin_hash(const char *name) {
+    if(!name || !*name) return 0;
+    uint32_t key=UINT32_MAX;
+    for(const unsigned char *p=(const unsigned char *)name;*p;p++) {
+        if(*p>=128u) return 0;
+        key=key*UINT32_C(33) + (uint32_t)*p;
+    }
+    return key;
+}
+const CareerSourceRace *ug2_career_prerequisite(
+    const UG2CareerIndex *cat,const CareerSourceRace *event) {
+    if(!cat || !event || cat->unique_races>UG2_CAREER_MAX_RACES ||
+       event->unlock_method!=0 || !event->prerequisite_key) return NULL;
+    const CareerSourceRace *candidate=NULL;
+    for(uint32_t i=0;i<cat->unique_races;i++) {
+        const CareerSourceRace *r=&cat->race[i];
+        if(ug2_career_bin_hash(r->id)!=event->prerequisite_key)continue;
+        if(candidate)return NULL; /* hash collision or duplicate */
+        candidate=r;
+    }
+    return candidate;
+}
 unsigned ug2_route_from_path(const char *path) {
     if(!path)return 0;
     const char *base=strrchr(path,'/');
