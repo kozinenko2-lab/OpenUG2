@@ -5907,6 +5907,7 @@ int main(int argc, char **argv) {
     int racetimer = 0, finish_place = 0;
     /* Mod metadata stays separate from EA assets. Do not credit real
      * wins with catalog payouts until race event identities are verified. */
+    UG2CareerIndex *career_mod_catalog=NULL; /* optional retained catalog */
     if(career_mod_path) {
         char gbpath[1024];
         int plen=snprintf(gbpath,sizeof gbpath,"%s/GLOBAL/GlobalB.lzc",dataroot);
@@ -5917,14 +5918,16 @@ int main(int argc, char **argv) {
             if(catalog) {
                 unsigned changed=0;
                 if(ug2_career_load_file(gbpath,catalog) &&
-                   ug2_career_apply_mods_file(catalog,career_mod_path,&changed))
+                   ug2_career_apply_mods_file(catalog,career_mod_path,&changed)) {
+                    career_mod_catalog=catalog; /* retain until game exit */
                     printf("career mod: %u reward overrides loaded against %u "
                            "unique race IDs (finish integration pending)\n",
                            changed,catalog->unique_races);
-                else
+                } else {
                     fprintf(stderr,"career mod: invalid config or original GlobalB; "
                                    "no overrides activated\n");
-                free(catalog);
+                    free(catalog);
+                }
             } else fprintf(stderr,"career mod: out of memory\n");
         }
     }
@@ -10921,6 +10924,7 @@ int main(int argc, char **argv) {
     }
     world_city_free(&world.city);
     free(ai_drive_path.xy);
+    free(career_mod_catalog);
     if (dbgprog) glDeleteProgram(dbgprog);
     if (adev) SDL_CloseAudioDevice(adev);
 #ifdef OPENUG2_MENU
