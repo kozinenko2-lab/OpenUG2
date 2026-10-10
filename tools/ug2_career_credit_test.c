@@ -92,6 +92,49 @@ int main(void) {
            loaded.total_wins==2 && loaded.stage==3);
     assert(ug2_career_credit_circuit(&c,cat,4081,b->id,2,3,1,path,&event)
            ==UG2_CREDIT_ALREADY_PAID);
+    /* Original stage-1 intro: requires a verifiably recorded DDAY_EVENT_B
+     * win, NOT merely an original predecessor key in the catalog. */
+    CareerSourceRace *pre=add(cat,"DDAY_EVENT_B",4000,0,0);
+    pre->opponents=0; /* scripted prologue, not supported as AI circuit */
+    CareerSourceRace *intro=add(cat,"STAGE_1_CIRCUIT_1",4013,1,250);
+    intro->unlock_method=0;
+    intro->prerequisite_key=ug2_career_bin_hash(pre->id);
+    intro->laps[0]=3;
+    Career first;career_init(&first);
+    char intro_path[512];
+    snprintf(intro_path,sizeof intro_path,"%s/intro.dat",directory);
+    Career initial=first;
+    assert(ug2_career_credit_circuit(&first,cat,4013,intro->id,
+                                     3,3,1,intro_path,&event)
+           ==UG2_CREDIT_NOT_ELIGIBLE && !event);
+    assert(!memcmp(&first,&initial,sizeof first));
+    /* Synthetic confirmed precursor: production may only call
+     * career_record_win after independently verifying its finish. */
+    assert(career_record_win(&first,"UG2_ORIGINAL",pre->id,
+                             CAREER_WORLD,1,1,0));
+    assert(career_save(&first,intro_path));
+    Career loaded_first;career_init(&loaded_first);
+    assert(career_load(&loaded_first,intro_path));
+    first=loaded_first;
+    Career before_intro=first;
+    assert(ug2_career_credit_circuit(&first,cat,4013,intro->id,
+                                     3,3,1,absent,&event)
+           ==UG2_CREDIT_SAVE_FAILED);
+    assert(event==intro && !memcmp(&first,&before_intro,sizeof first));
+    assert(ug2_career_credit_circuit(&first,cat,4013,intro->id,
+                                     3,3,1,intro_path,&event)
+           ==UG2_CREDIT_PAID);
+    assert(event==intro && first.money==250 && first.total_wins==2 &&
+           first.stage==1);
+    assert(career_load(&loaded_first,intro_path) &&
+           loaded_first.money==250 && loaded_first.total_wins==2);
+    assert(ug2_career_credit_circuit(&first,cat,4013,intro->id,
+                                     3,3,1,intro_path,&event)
+           ==UG2_CREDIT_ALREADY_PAID);
+
+    unlink(intro_path);
+    snprintf(intro_path,sizeof intro_path,"%s/intro.dat.bak",directory);
+    unlink(intro_path);
     unlink(path);
     snprintf(path,sizeof path,"%s/career.dat.bak",directory);
     unlink(path);
