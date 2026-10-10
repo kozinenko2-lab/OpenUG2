@@ -22,11 +22,12 @@ static void race_test(void) {
     p16(d+0x18,0x1234);d[0x1b]=3;
     p16(d+0x1c,0x4567);d[0x1f]=2;
     p32(d+0x30,1250);
-    d[0x34]=3;d[0x37]=2;d[0x7c]=3;d[0x7e]=2;
+    d[0x0f]=0;d[0x34]=3;d[0x37]=2;d[0x7c]=3;d[0x7e]=2;d[0x7f]=1;
     CareerSourceRace out;
     memset(&out,0xa5,sizeof out);
     assert(career_source_decode_race(d,sizeof d,names,sizeof names,&out));
     assert(!strcmp(out.id,"RACE_ALPHA") && !strcmp(out.trigger,"START_A"));
+    assert(out.behavior==0 && out.is_hidden==1);
     assert(out.stage==2 && out.cash_value==1250 &&
            out.opponents==3 && out.num_stages==2);
     assert(out.track_ids[0]==0x1234 && out.laps[0]==3);
