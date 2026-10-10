@@ -4919,6 +4919,18 @@ int main(int argc, char **argv) {
     }
     char circlist[MAXCIRC][256]; int selcirc = 0;
     int ncirc = res_list_circuits(troot, trackname, circlist, MAXCIRC);
+    /* Never credit a legacy AI circuit from a different original route. */
+    if(career_selection_ready) {
+        int matching=-1;
+        for(int k=0;k<ncirc;k++)
+            if(ug2_career_path_matches(&career_selection,circlist[k])) {
+                matching=k;break;
+            }
+        if(matching>=0) {
+            selcirc=matching;
+            printf("career mapped AI route: %s\n",circlist[selcirc]);
+        } else printf("career: no matching AI circuit in selected region, no cash\n");
+    }
     AiRoadNet roam_roads={0};
     if(world2)ai_roads_load(&roam_roads,troot);
     CarSwitchCandidate traffic[N_ROAM_VISUALS]={0};
@@ -8118,7 +8130,9 @@ int main(int argc, char **argv) {
              * Never award cash for solo gates or the legacy unbound circuit.
              * The provisional 500-credit payout is permanently disabled. */
             if(career_save_path && finish_place==1 && nai>0 && ncirc>0 &&
-               selcirc>=0 && selcirc<ncirc && aipath.n>1) {
+               selcirc>=0 && selcirc<ncirc && aipath.n>1 &&
+               career_selection_ready &&
+               ug2_career_path_matches(&career_selection,circlist[selcirc])) {
                 int matched_world=(world.city.race.active &&
                      world.city.race.finished &&
                      world.city.race.maxlaps==(int)career_selection.race.laps[0] &&
