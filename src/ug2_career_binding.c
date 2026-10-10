@@ -36,8 +36,10 @@ static int original_circuit_supported(const CareerSourceRace *r,
                                        unsigned laps,unsigned opponents) {
     if(!r || r->stage!=stage || r->icon_type!=3 ||
        r->num_stages!=1 || r->track_ids[0]!=route ||
-       r->laps[0]!=laps || r->opponents!=opponents ||
-       !opponents || !laps || laps>16 || !r->cash_value ||
+       (laps && r->laps[0]!=laps) ||
+       (opponents && r->opponents!=opponents) ||
+       !r->opponents || !r->laps[0] || r->laps[0]>16 ||
+       !r->cash_value ||
        r->cash_value>1000000u) return 0;
     /* Until we have other original game-mode implementations, award only
      * regular 0x3414c circuit routes. Drift/drag/street/URL/sponsor cannot
