@@ -152,6 +152,19 @@ ug2-career-binding-test: tools/ug2_career_binding_test.c src/ug2_career_binding.
 	./build/ug2_career_binding_test
 .PHONY: ug2-career-binding-test
 
+# Optional asset scanner for investigating original trigger references on
+# the user's own installation. No renderer, SDL, EA data or generated headers.
+ug2-trigger-probe: tools/ug2_trigger_probe.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) tools/ug2_trigger_probe.c -o build/ug2_trigger_probe
+.PHONY: ug2-trigger-probe
+
+ug2-trigger-probe-test: tools/ug2_trigger_probe_test.c tools/ug2_trigger_probe.c
+	@mkdir -p build
+	$(CC) $(CFLAGS) tools/ug2_trigger_probe_test.c -o build/ug2_trigger_probe_test
+	./build/ug2_trigger_probe_test
+.PHONY: ug2-trigger-probe-test
+
 ug2-career-file-test: tools/ug2_career_file_test.c src/ug2_career_file.c src/ug2_career_file.h src/career_source_catalog.c src/career_source_catalog.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Isrc tools/ug2_career_file_test.c src/ug2_career_file.c src/career_source_catalog.c -o build/ug2_career_file_test
